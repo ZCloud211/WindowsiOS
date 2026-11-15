@@ -1,0 +1,36 @@
+name: Windows one-click crash collector
+on:
+  workflow_dispatch:
+  push:
+    branches: ['gpu-driver-build/**']
+    paths: ['drivers/windows/logs/**', '.github/workflows/windows-log-collector.yml']
+permissions:
+  contents: read
+jobs:
+  collector:
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate and run under Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force build/collector | Out-Null
+          $source = Get-Content drivers/windows/logs/CollectCrash.ps1 -Raw -Encoding UTF8
+          $script = Join-Path $PWD 'build/collector/CollectCrash.ps1'
+          [IO.File]::WriteAllText($script, $source, (New-Object Text.UTF8Encoding($true)))
+          $tokens = $null; $parseErrors = $null
+          [Management.Automation.Language.Parser]::ParseFile($script,[ref]$tokens,[ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count) { $parseErrors | Format-List; throw 'Collector syntax failed.' }
+          $out = Join-Path $PWD 'build/collector/results'
+          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script -OutputRoot $out -NoElevation -NoFlush -NoDumps
+          if ($LASTEXITCODE) { throw 'Collector execution failed.' }
+          $result = Get-ChildItem $out -Recurse -Filter RESULT.JSON | Select-Object -First 1
+          if (-not $result) { throw 'No result manifest.' }
+          $data = Get-Content $result.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+          if (-not $data.completed -or $data.format_version -ne 1) { throw 'Incomplete collection.' }
+          foreach ($name in @('EVENTS.XML','EVENTS.TXT','DISPLAY.TXT','DRIVERS.TXT','CRASHCFG.TXT','SYSTEM.JSON','DONE.TXT')) {
+            if (-not (Test-Path (Join-Path $result.DirectoryName $name))) { throw "Missing output: $name" }
+          }
+          Write-Output 'PASS: Windows PowerShell 5.1 syntax, collection and result files. No collected events uploaded.'
