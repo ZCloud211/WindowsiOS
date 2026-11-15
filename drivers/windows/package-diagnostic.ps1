@@ -2,6 +2,8 @@
 # Run on the ephemeral build runner only. Never exports the private signing key.
 param([string]$BuildDirectory = 'build/windows-gpu')
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+Write-Output 'Preparing diagnostic files.'
 $built = Get-ChildItem "$BuildDirectory/diagnostic" -Recurse -Filter wingpudiag.inf | Select-Object -First 1
 if (-not $built) { throw 'Diagnostic INF missing.' }
 $package = Join-Path $BuildDirectory 'package'
@@ -11,6 +13,7 @@ Copy-Item "$($built.DirectoryName)/WinGpuDiagnostic.sys" $package
 Copy-Item "$BuildDirectory/probe/WinGpuProbe.exe" $package
 Copy-Item 'gpu/LICENSE' "$package/LICENSE.txt"
 Copy-Item 'drivers/windows/diagnostic/TESTING.md' "$package/README.md"
+Write-Output 'Creating disposable non-exportable test signing key.'
 $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=WindowsiOS GPU diagnostic test only' `
     -CertStoreLocation Cert:\CurrentUser\My -KeyAlgorithm RSA -KeyLength 2048 `
     -HashAlgorithm SHA256 -KeyExportPolicy NonExportable -NotAfter (Get-Date).AddMonths(3)
@@ -18,16 +21,23 @@ Export-Certificate -Cert $cert -FilePath "$package/WinGpuDiagnostic-test.cer" | 
 $tool = Get-ChildItem drivers/windows/packages -Recurse -Filter signtool.exe |
     Where-Object FullName -Match '\\x64\\' | Select-Object -First 1
 if (-not $tool) { throw 'Missing x64 signtool.' }
-& $tool.FullName sign /fd SHA256 /s My /sha1 $cert.Thumbprint "$package/WinGpuDiagnostic.sys"
+Write-Output 'Signing diagnostic sys.'
+& $tool.FullName sign /v /fd SHA256 /s My /sha1 $cert.Thumbprint "$package/WinGpuDiagnostic.sys"
 if ($LASTEXITCODE) { throw 'Embedded test signature failed.' }
 # Rebuild catalog AFTER embedding the sys signature; signing changes its hash.
+Write-Output 'Generating Windows 11 ARM64 catalog.'
 & inf2cat.exe "/driver:$((Resolve-Path $package).Path)" /os:10_GE_ARM64 /uselocaltime
 if ($LASTEXITCODE) { throw 'Diagnostic catalog generation failed.' }
-& $tool.FullName sign /fd SHA256 /s My /sha1 $cert.Thumbprint "$package/WinGpuDiagnostic.cat"
+Write-Output 'Signing diagnostic catalog.'
+& $tool.FullName sign /v /fd SHA256 /s My /sha1 $cert.Thumbprint "$package/WinGpuDiagnostic.cat"
 if ($LASTEXITCODE) { throw 'Catalog test signature failed.' }
 # Trust is confined to this disposable runner. No guest boot policy is changed.
-Import-Certificate -FilePath "$package/WinGpuDiagnostic-test.cer" -CertStoreLocation Cert:\CurrentUser\Root | Out-Null
-Import-Certificate -FilePath "$package/WinGpuDiagnostic-test.cer" -CertStoreLocation Cert:\CurrentUser\TrustedPublisher | Out-Null
+Write-Output 'Trusting test certificate on disposable runner only, without interactive dialogs.'
+& certutil.exe -user -f -addstore Root "$package/WinGpuDiagnostic-test.cer"
+if ($LASTEXITCODE) { throw 'Runner test root import failed.' }
+& certutil.exe -user -f -addstore TrustedPublisher "$package/WinGpuDiagnostic-test.cer"
+if ($LASTEXITCODE) { throw 'Runner test publisher import failed.' }
+Write-Output 'Verifying embedded signature and catalog membership.'
 & $tool.FullName verify /pa /v "$package/WinGpuDiagnostic.sys"
 if ($LASTEXITCODE) { throw 'Embedded signature verification failed.' }
 & $tool.FullName verify /pa /v /c "$package/WinGpuDiagnostic.cat" "$package/WinGpuDiagnostic.sys"

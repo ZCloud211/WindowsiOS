@@ -63,6 +63,7 @@ jobs:
           msbuild drivers/windows/diagnostic/WinGpuDiagnostic.vcxproj /t:Build /m /p:Configuration=Release /p:Platform=ARM64 /p:PreferredToolArchitecture=x64 /p:SignMode=Off "/p:OutDir=$out" /p:Inf2CatUseLocalTime=true /fl /flp:logfile=diagnostic-build.log
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Package test-signed diagnostic driver
+        timeout-minutes: 3
         shell: pwsh
         run: ./drivers/windows/package-diagnostic.ps1
       - uses: actions/cache/save@v4

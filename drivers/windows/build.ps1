@@ -19,10 +19,11 @@ if ($CheckOnly) { exit 0 }
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 $driver = Join-Path $PSScriptRoot 'kmdod\Sample\SampleDisplay.vcxproj'
 $probe = Join-Path $PSScriptRoot 'probe\WinGpuProbe.vcxproj'
-foreach ($entry in @(@{Project=$driver;Name='driver'}, @{Project=$probe;Name='probe'})) {
+$diagnostic = Join-Path $PSScriptRoot 'diagnostic\WinGpuDiagnostic.vcxproj'
+foreach ($entry in @(@{Project=$driver;Name='driver'}, @{Project=$probe;Name='probe'}, @{Project=$diagnostic;Name='diagnostic'})) {
     $out = (Join-Path $OutputDirectory $entry.Name) + '\'
     $intermediate = (Join-Path $OutputDirectory ($entry.Name + '-obj')) + '\'
-    $arguments = @($entry.Project, '/t:Build', '/m', '/p:Configuration=Release', '/p:Platform=ARM64',
+    $arguments = @($entry.Project, '/t:Build', '/m', '/p:Configuration=Release', '/p:Platform=ARM64', '/p:PreferredToolArchitecture=x64',
         "/p:WindowsTargetPlatformVersion=$kitVersion", '/p:SignMode=Off', "/p:OutDir=$out", "/p:IntDir=$intermediate")
     & $msbuild.Source @arguments
     if ($LASTEXITCODE -ne 0) { throw "$($entry.Name) build failed with exit code $LASTEXITCODE" }
