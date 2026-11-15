@@ -183,6 +183,9 @@
       <FileDigestAlgorithm>sha256</FileDigestAlgorithm>
     </DriverSign>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup>
+    <ClCompile><PreprocessorDefinitions>WG_WINDOWS_KERNEL=1;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+  </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\BDD.cxx" />
     <ClCompile Include="..\BDD_DDI.cxx" />

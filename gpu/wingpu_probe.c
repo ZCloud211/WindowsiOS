@@ -1,11 +1,11 @@
 /* SPDX-License-Identifier: MIT */
 #include "wingpu_probe.h"
 
-uint32_t wg_encode_probe(void *batch, uint32_t capacity, uint64_t fence) {
-    const uint32_t bytes = sizeof(WgBatchHeader) + 4 * sizeof(WgCommand);
-    if (!batch || ((uintptr_t)batch & 7) || capacity < bytes || !fence) return 0;
+wg_u32 wg_encode_probe(void *batch, wg_u32 capacity, wg_u64 fence) {
+    const wg_u32 bytes = sizeof(WgBatchHeader) + 4 * sizeof(WgCommand);
+    if (!batch || ((wg_uptr)batch & 7) || capacity < bytes || !fence) return 0;
     unsigned char *raw = batch;
-    for (uint32_t n = 0; n < bytes; n++) raw[n] = 0;
+    for (wg_u32 n = 0; n < bytes; n++) raw[n] = 0;
     WgBatchHeader *h = batch;
     WgCommand *c = (WgCommand *)(h + 1);
     h->magic = WG_MAGIC; h->version = WG_ABI_VERSION;

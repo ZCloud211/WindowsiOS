@@ -16,12 +16,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
       - uses: NuGet/setup-nuget@v2
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
+        id: wdk_cache
         with:
           path: drivers/windows/packages
           key: gpu-wdk-${{ runner.os }}-${{ hashFiles('drivers/windows/packages.config') }}
       - name: Restore pinned WDK and SDK
+        id: restore_wdk
         run: nuget restore drivers/windows/packages.config -PackagesDirectory drivers/windows/packages -NonInteractive
       - name: Inspect WDK tool locations
         shell: pwsh
@@ -34,6 +38,7 @@ jobs:
             if (-not $tool) { throw "Missing x64/x86 WDK host tool: $name" }
             Write-Output "$name => $($tool.FullName)"
             $tool.DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            $tool.Directory.Parent.FullName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           }
           Get-ChildItem drivers/windows/packages -Recurse -Include '*.props','*.targets' |
             Select-String -Pattern 'StampInfToolPath|WdkBinRoot|WDKBinRoot|StampInfExe' |
@@ -42,14 +47,19 @@ jobs:
         shell: pwsh
         run: |
           $out = "$env:GITHUB_WORKSPACE\build\windows-gpu\driver\"
-          msbuild drivers/windows/kmdod/Sample/SampleDisplay.vcxproj /t:Build /m /p:Configuration=Release /p:Platform=ARM64 /p:SignMode=Off "/p:OutDir=$out" /p:Inf2CatUseLocalTime=true /fl /flp:logfile=driver-build.log
+          msbuild drivers/windows/kmdod/Sample/SampleDisplay.vcxproj /t:Build /m /p:Configuration=Release /p:Platform=ARM64 /p:PreferredToolArchitecture=x64 /p:SignMode=Off "/p:OutDir=$out" /p:Inf2CatUseLocalTime=true /fl /flp:logfile=driver-build.log
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Compile ARM64 GPU probe
         shell: pwsh
         run: |
           $out = "$env:GITHUB_WORKSPACE\build\windows-gpu\probe\"
-          msbuild drivers/windows/probe/WinGpuProbe.vcxproj /t:Build /m /p:Configuration=Release /p:Platform=ARM64 "/p:OutDir=$out" /fl /flp:logfile=probe-build.log
+          msbuild drivers/windows/probe/WinGpuProbe.vcxproj /t:Build /m /p:Configuration=Release /p:Platform=ARM64 /p:PreferredToolArchitecture=x64 "/p:OutDir=$out" /fl /flp:logfile=probe-build.log
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - uses: actions/cache/save@v4
+        if: always() && steps.wdk_cache.outputs.cache-hit != 'true' && steps.restore_wdk.outcome == 'success'
+        with:
+          path: drivers/windows/packages
+          key: gpu-wdk-${{ runner.os }}-${{ hashFiles('drivers/windows/packages.config') }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
