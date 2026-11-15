@@ -4,6 +4,7 @@
  */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <winioctl.h>
 #include <setupapi.h>
 #include <initguid.h>
 #include <stdio.h>
