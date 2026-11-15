@@ -6,12 +6,37 @@ on:
     paths: ['drivers/windows/logs/**', '.github/workflows/windows-log-collector.yml']
 permissions:
   contents: read
+  actions: read
 jobs:
   collector:
     runs-on: windows-2025-vs2026
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-virtio-display-arm64
+          run-id: 43713195856
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: build/collector/package
+      - name: Validate preparation tool against verified official package
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $source = Get-Content drivers/windows/logs/PrepareDisplay.ps1 -Raw -Encoding UTF8
+          $script = Join-Path $PWD 'build/collector/package/PrepareDisplay.ps1'
+          [IO.File]::WriteAllText($script, $source, (New-Object Text.UTF8Encoding($true)))
+          $tokens = $null; $parseErrors = $null
+          [Management.Automation.Language.Parser]::ParseFile($script,[ref]$tokens,[ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count) { $parseErrors | Format-List; throw 'Preparation tool syntax failed.' }
+          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script -ValidateOnly
+          if ($LASTEXITCODE) { throw 'Official package validation failed.' }
+          # Invalid packages must be refused before any configuration changes.
+          Add-Content build/collector/package/viogpudo.inf '; changed package fixture'
+          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script -ValidateOnly
+          if ($LASTEXITCODE -eq 0) { throw 'Modified INF was accepted.' }
+          Write-Output 'PASS: Windows PowerShell 5.1, original package accepted, altered INF refused; driver/configuration writes not executed in CI.'
+          exit 0
       - name: Validate and run under Windows PowerShell 5.1
         shell: powershell
         run: |

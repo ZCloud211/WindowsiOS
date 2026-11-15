@@ -6,20 +6,15 @@
 
 ## 在 Windows 内安装
 
-1. 正常关闭 Windows，退出 App。新版 App 中打开“VirtIO 显示设备”，关闭“UEFI test”和“挂载安装盘”；驱动盘会随下次启动挂载。
-2. 自行用 StikDebug 启用 JIT，启动 Windows。
-3. 在 Windows 打开管理员 PowerShell，粘贴：
+1. 正常关闭 Windows，退出 App。关闭“VirtIO 显示设备”“UEFI test”“挂载安装盘”，只打开“挂载驱动／日志盘”。
+2. 自行用 StikDebug 启用 JIT，启动 Windows。在“此电脑”的 WINIOSDRV 盘双击 **准备显示驱动与蓝屏记录.cmd**，权限提示选择“是”。
+3. 工具核对官方包哈希，在显卡关闭时把 302 版 ARM64 显示驱动加入驱动库；不会删除旧驱动或自动重启。保存原设置后，将 CrashDumpEnabled 设为 3（小型转储）、LogEvent 设为 1、AutoReboot 设为 0。分页文件设置保持不变，因此是否实际生成转储还取决于原系统配置。
+4. 显示“准备完成”后，回复“已准备驱动”，由我只读核对工具盘上的 PREPLOGS。核对后再正常关闭 Windows、退出 App，打开“VirtIO 显示设备”，由你启用 JIT 并启动。新版通常应自动优先匹配，但仍需确认实际加载的驱动版本。
 
-```powershell
-$v = Get-Volume -FileSystemLabel WINIOSDRV -ErrorAction Stop
-if (-not $v.DriveLetter) { throw '驱动盘没有盘符，请保留当前画面；不要格式化任何磁盘。' }
-pnputil /add-driver "$($v.DriveLetter):\viogpudo.inf" /install
-```
-
-如果安装程序提示重启，正常重启 Windows。然后进入“设置 → 系统 → 屏幕 → 屏幕分辨率”，选择合适的分辨率。先使用 1280×960 或 1600×1200；2048×1536 会增加软件渲染负担。
+驱动加载后预期可在“设置 → 系统 → 屏幕 → 屏幕分辨率”切换模式。先使用 1280×960 或 1600×1200；2048×1536 会增加软件渲染负担。
 
 不需要导入自签名测试证书，也不需要为本包开启测试签名。不要运行旧的 `wingpudiag.inf`／`WinGpuProbe.exe` 诊断流程。
 
-若出现黑屏，先等待系统恢复；下一次正常退出 App 后，可关闭“VirtIO 显示设备”，恢复固件显示路径。不要清理或重新格式化 Windows 系统盘。
+若再次蓝屏，下一次退出 App 后关闭“VirtIO 显示设备”，恢复原桌面，再双击“一键收集日志.cmd”。不要清理或重新格式化 Windows 系统盘。
 
 此处描述的是预期行为；iPad 上的驱动启动和系统内分辨率切换须由用户启动后确认。源文件、哈希及官方镜像来源见随盘 SOURCE.json 和 SHA256SUMS.txt。许可证见 LICENSE.txt。

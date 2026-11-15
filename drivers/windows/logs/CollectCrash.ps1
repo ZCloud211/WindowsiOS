@@ -46,6 +46,12 @@ Write-Host '正在读取显示设备及转储设置…'
 Read-Command 'DISPLAY.TXT' 'pnputil.exe' @('/enum-devices','/class','Display','/drivers')
 Read-Command 'DRIVERS.TXT' 'pnputil.exe' @('/enum-drivers')
 Read-Command 'CRASHCFG.TXT' 'reg.exe' @('query','HKLM\SYSTEM\CurrentControlSet\Control\CrashControl')
+foreach ($name in @('PREP.JSON','PAGEFILE.JSON','STAGE.TXT')) {
+    $path=Join-Path (Join-Path $PSScriptRoot 'PREPLOGS') $name
+    if (Test-Path -LiteralPath $path -PathType Leaf) {
+        if ((Get-Item -LiteralPath $path).Length -le 128KB) { Copy-Item -LiteralPath $path -Destination $destination }
+    }
+}
 try {
     $os = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
     $system = [ordered]@{
