@@ -38,11 +38,13 @@ Windows 侧从微软 KMDOD 示例引入独立显示驱动工程，增加受限�
 3. 共享编码器交叉编译为 Windows ARM64 COFF 对象，确认 ABI 大小和基础 C 源码可编译。
 4. iOS ARM64 静态库编译，以及原有核心和 CPU/SMBIOS 回归检查。
 
-未验证：完整 Windows `.sys`/探针的 WDK 编译、驱动签名与加载、POST 显示所有权、iPad 上 GPU 命令执行、Windows 桌面和任意 Direct3D 应用加速。上述主机测试不等于在 Windows 内运行过驱动。
+2026-11-15，完整 Windows ARM64 `.sys` 和 ARM64 探针的 [Windows/WDK 编译已通过](https://github.com/ZCloud211/WindowsiOS/actions/runs/43701541533)，均为 0 警告、0 错误，接口检查、INF 检查及目录生成通过。已下载并核验产物哈希、ARM64 PE 机器类型和子系统。内核驱动没有嵌入签名。代码版本为 `95103d0d087c986da2d94230c54ec42a6ad44a92`，云端分支为 `gpu-driver-build/m1-metal-bringup-20261115`，默认分支未修改。
+
+未验证：驱动签名与 Windows 加载、POST 显示所有权、iPad 上 GPU 命令执行、Windows 桌面和任意 Direct3D 应用加速。上述主机测试和编译通过不等于在 Windows 内运行过驱动。
 
 ## 下一道验收关卡
 
-1. 在 Windows/WDK 中编译完整内核驱动和 ARM64 探针，修复真实编译错误。
+1. Windows/WDK 编译已通过；后续源码改动继续由同一独立分支验证。
 2. 验证驱动加载与固定 GPU 探针的完成回执，处理 POST 所有权、复位、电源状态和失败恢复。目前仍不能在用户已安装系统上直接替换显示驱动。
 3. 在独立测试环境补齐 WDDM 资源、上下文、GPU 围栏、调度和用户态 Direct3D DDI；接入并验证着色器转换及缓存。
 4. 再把实际渲染纹理交给显示链路，验证 DWM/常用 Windows 应用，随后才测性能。
