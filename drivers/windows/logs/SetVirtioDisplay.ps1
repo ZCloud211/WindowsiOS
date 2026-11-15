@@ -42,7 +42,7 @@ try {
     $form.StartPosition='CenterScreen';$form.TopMost=$true
     $form.FormBorderStyle='FixedDialog';$form.MaximizeBox=$false;$form.MinimizeBox=$false
     $label=New-Object Windows.Forms.Label
-    $label.Text="桌面、窗口和光标是否完整可见？`r`n选择“保留”；30 秒未确认将自动恢复原布局。"
+    $label.Text='桌面、窗口和光标是否完整可见？'+[Environment]::NewLine+'选择 保留；30 秒未确认将自动恢复原布局。'
     $label.Location=New-Object Drawing.Point(18,20);$label.Size=New-Object Drawing.Size(420,55)
     $keep=New-Object Windows.Forms.Button
     $keep.Text='保留(&Y)';$keep.DialogResult=[Windows.Forms.DialogResult]::OK
