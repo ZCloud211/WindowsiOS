@@ -29,18 +29,18 @@ Write-Output 'Generating Windows 11 ARM64 catalog.'
 & inf2cat.exe "/driver:$((Resolve-Path $package).Path)" /os:10_GE_ARM64 /uselocaltime
 if ($LASTEXITCODE) { throw 'Diagnostic catalog generation failed.' }
 Write-Output 'Signing diagnostic catalog.'
-& $tool.FullName sign /v /fd SHA256 /s My /sha1 $cert.Thumbprint "$package/WinGpuDiagnostic.cat"
+& $tool.FullName sign /v /fd SHA256 /s My /sha1 $cert.Thumbprint "$package/wingpudiagnostic.cat"
 if ($LASTEXITCODE) { throw 'Catalog test signature failed.' }
 # Trust is confined to this disposable runner. No guest boot policy is changed.
-Write-Output 'Trusting test certificate on disposable runner only, without interactive dialogs.'
-& certutil.exe -user -f -addstore Root "$package/WinGpuDiagnostic-test.cer"
+Write-Output 'Trusting test certificate in disposable runner machine stores (no current-user root consent UI).'
+& certutil.exe -f -addstore Root "$package/WinGpuDiagnostic-test.cer"
 if ($LASTEXITCODE) { throw 'Runner test root import failed.' }
-& certutil.exe -user -f -addstore TrustedPublisher "$package/WinGpuDiagnostic-test.cer"
+& certutil.exe -f -addstore TrustedPublisher "$package/WinGpuDiagnostic-test.cer"
 if ($LASTEXITCODE) { throw 'Runner test publisher import failed.' }
 Write-Output 'Verifying embedded signature and catalog membership.'
 & $tool.FullName verify /pa /v "$package/WinGpuDiagnostic.sys"
 if ($LASTEXITCODE) { throw 'Embedded signature verification failed.' }
-& $tool.FullName verify /pa /v /c "$package/WinGpuDiagnostic.cat" "$package/WinGpuDiagnostic.sys"
+& $tool.FullName verify /pa /v /c "$package/wingpudiagnostic.cat" "$package/WinGpuDiagnostic.sys"
 if ($LASTEXITCODE) { throw 'Catalog signature or driver membership verification failed.' }
 @{
     source_commit=$env:GITHUB_SHA; build_run=$env:GITHUB_RUN_ID
