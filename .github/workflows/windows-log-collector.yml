@@ -13,6 +13,23 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - name: Validate one-shot VirtIO display setup without changing runner displays
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force build/display-tool | Out-Null
+          Copy-Item drivers/windows/logs/DisplayTopology.cs build/display-tool/
+          $source = Get-Content drivers/windows/logs/SetVirtioDisplay.ps1 -Raw -Encoding UTF8
+          $script = Join-Path $PWD 'build/display-tool/SetVirtioDisplay.ps1'
+          [IO.File]::WriteAllText($script, $source, (New-Object Text.UTF8Encoding($true)))
+          $tokens=$null; $parseErrors=$null
+          [Management.Automation.Language.Parser]::ParseFile($script,[ref]$tokens,[ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count) { $parseErrors | Format-List; throw 'Display tool syntax failed.' }
+          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script -SelfTest
+          if ($LASTEXITCODE) { throw 'Display ABI/selection validation failed.' }
+          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script -InspectOnly
+          if ($LASTEXITCODE) { throw 'Read-only Win32 display enumeration failed.' }
+          Write-Output 'PASS: Windows PowerShell 5.1 compiles display helper and reads native display APIs; no topology changes executed.'
       - uses: actions/download-artifact@v4
         with:
           name: verified-virtio-display-arm64
@@ -42,6 +59,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force build/collector | Out-Null
+          Copy-Item drivers/windows/logs/DisplayTopology.cs build/collector/
           $source = Get-Content drivers/windows/logs/CollectCrash.ps1 -Raw -Encoding UTF8
           $script = Join-Path $PWD 'build/collector/CollectCrash.ps1'
           [IO.File]::WriteAllText($script, $source, (New-Object Text.UTF8Encoding($true)))
@@ -55,7 +73,7 @@ jobs:
           if (-not $result) { throw 'No result manifest.' }
           $data = Get-Content $result.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
           if (-not $data.completed -or $data.format_version -ne 1) { throw 'Incomplete collection.' }
-          foreach ($name in @('EVENTS.XML','EVENTS.TXT','DISPLAY.TXT','DRIVERS.TXT','CRASHCFG.TXT','SYSTEM.JSON','DONE.TXT')) {
+          foreach ($name in @('EVENTS.XML','EVENTS.TXT','DISPLAY.TXT','DRIVERS.TXT','CRASHCFG.TXT','SYSTEM.JSON','TOPOLOGY.JSON','DONE.TXT')) {
             if (-not (Test-Path (Join-Path $result.DirectoryName $name))) { throw "Missing output: $name" }
           }
           Write-Output 'PASS: Windows PowerShell 5.1 syntax, collection and result files. No collected events uploaded.'

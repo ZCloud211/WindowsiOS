@@ -46,6 +46,26 @@ Write-Host '正在读取显示设备及转储设置…'
 Read-Command 'DISPLAY.TXT' 'pnputil.exe' @('/enum-devices','/class','Display','/drivers')
 Read-Command 'DRIVERS.TXT' 'pnputil.exe' @('/enum-drivers')
 Read-Command 'CRASHCFG.TXT' 'reg.exe' @('query','HKLM\SYSTEM\CurrentControlSet\Control\CrashControl')
+try {
+    $source=Join-Path $PSScriptRoot 'DisplayTopology.cs'
+    if (Test-Path -LiteralPath $source) {
+        if (-not ('WinIOSDisplayTopology' -as [type])) { Add-Type -TypeDefinition ([IO.File]::ReadAllText($source,[Text.Encoding]::UTF8)) -Language CSharp }
+        Save-Text 'TOPOLOGY.JSON' (ConvertTo-Json -InputObject @([WinIOSDisplayTopology]::Read()) -Depth 6)
+    }
+    $root=Join-Path $PSScriptRoot 'DISPLAYLOGS'
+    if (Test-Path -LiteralPath $root) {
+        $latest=Get-ChildItem -LiteralPath $root -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'DONE.TXT') } |
+            Sort-Object Name -Descending | Select-Object -First 1
+        if ($latest) {
+            foreach ($name in @('RESULT.JSON','BEFORE.JSON','AFTER.JSON')) {
+                $path=Join-Path $latest.FullName $name
+                if ((Test-Path -LiteralPath $path -PathType Leaf) -and (Get-Item -LiteralPath $path).Length -le 128KB) {
+                    Copy-Item -LiteralPath $path -Destination (Join-Path $destination ('DISPLAY_'+$name))
+                }
+            }
+        }
+    }
+} catch { $problems.Add('Display topology: '+$_.Exception.Message) }
 foreach ($name in @('PREP.JSON','PAGEFILE.JSON','STAGE.TXT')) {
     $path=Join-Path (Join-Path $PSScriptRoot 'PREPLOGS') $name
     if (Test-Path -LiteralPath $path -PathType Leaf) {
