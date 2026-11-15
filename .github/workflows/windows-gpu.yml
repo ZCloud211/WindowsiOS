@@ -55,6 +55,12 @@ jobs:
           $out = "$env:GITHUB_WORKSPACE\build\windows-gpu\probe\"
           msbuild drivers/windows/probe/WinGpuProbe.vcxproj /t:Build /m /p:Configuration=Release /p:Platform=ARM64 /p:PreferredToolArchitecture=x64 "/p:OutDir=$out" /fl /flp:logfile=probe-build.log
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Compile independent ARM64 PCI diagnostic driver
+        shell: pwsh
+        run: |
+          $out = "$env:GITHUB_WORKSPACE\build\windows-gpu\diagnostic\"
+          msbuild drivers/windows/diagnostic/WinGpuDiagnostic.vcxproj /t:Build /m /p:Configuration=Release /p:Platform=ARM64 /p:PreferredToolArchitecture=x64 /p:SignMode=Off "/p:OutDir=$out" /p:Inf2CatUseLocalTime=true /fl /flp:logfile=diagnostic-build.log
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - uses: actions/cache/save@v4
         if: always() && steps.wdk_cache.outputs.cache-hit != 'true' && steps.restore_wdk.outcome == 'success'
         with:
@@ -68,4 +74,5 @@ jobs:
             build/windows-gpu/
             driver-build.log
             probe-build.log
+            diagnostic-build.log
           retention-days: 7
