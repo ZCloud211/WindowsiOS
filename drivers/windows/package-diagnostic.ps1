@@ -38,7 +38,7 @@ if ($LASTEXITCODE) { throw 'Catalog signature or driver membership verification 
     test_signed=$true; production_signed=$false; windows_load_verified=$false
     direct3d_implemented=$false; private_key_exported=$false
 } | ConvertTo-Json | Set-Content "$package/BUILD.json" -Encoding utf8
-Get-ChildItem $package -File | Sort-Object Name | ForEach-Object {
+Get-ChildItem $package -File | Where-Object Name -NE 'SHA256SUMS.txt' | Sort-Object Name | ForEach-Object {
     "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
 } | Set-Content "$package/SHA256SUMS.txt" -Encoding ascii
 Write-Output "Packaged ARM64 diagnostics with test certificate $($cert.Thumbprint). Windows loading is not verified."

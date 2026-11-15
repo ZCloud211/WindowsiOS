@@ -30,7 +30,7 @@ AddService=WinGpuDiagnostic,0x00000002,Service
 [Install.NT.Wdf]
 KmdfService=WinGpuDiagnostic,Wdf
 [Wdf]
-KmdfLibraryVersion=1.33
+KmdfLibraryVersion=1.15
 [DriverFiles]
 WinGpuDiagnostic.sys
 [Service]

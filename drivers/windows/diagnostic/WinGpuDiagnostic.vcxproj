@@ -15,9 +15,11 @@
     <TargetVersion>Windows10</TargetVersion>
     <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
     <UseDebugLibraries>false</UseDebugLibraries>
+    <KMDF_VERSION_MAJOR>1</KMDF_VERSION_MAJOR>
+    <KMDF_VERSION_MINOR>15</KMDF_VERSION_MINOR>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
-  <PropertyGroup><TargetName>WinGpuDiagnostic</TargetName><KmdfLibraryVersion>1.33</KmdfLibraryVersion></PropertyGroup>
+  <PropertyGroup><TargetName>WinGpuDiagnostic</TargetName></PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile><WarningLevel>Level4</WarningLevel><TreatWarningAsError>true</TreatWarningAsError><PreprocessorDefinitions>WG_WINDOWS_KERNEL=1;%(PreprocessorDefinitions)</PreprocessorDefinitions><ExceptionHandling>false</ExceptionHandling></ClCompile>
     <Inf><TimeStamp>0.0.2.0</TimeStamp></Inf>
@@ -27,6 +29,7 @@
     <ClCompile Include="..\common\transport.cxx" />
     <ClCompile Include="..\..\..\gpu\wingpu_probe.c" />
     <Inf Include="wingpudiag.inf" />
+    <FilesToPackage Include="$(TargetPath)" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
