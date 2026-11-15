@@ -1,0 +1,54 @@
+name: Verified Windows ARM64 VirtIO display package
+on:
+  workflow_dispatch:
+  push:
+    branches: ['gpu-driver-build/**']
+    paths: ['.github/workflows/virtio-display.yml']
+permissions:
+  contents: read
+jobs:
+  display:
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch official pinned VirtIO driver ISO
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.302-1/virtio-win-0.1.302.iso'
+          New-Item -ItemType Directory -Force build/virtio-display | Out-Null
+          curl.exe --fail --location --retry 2 --max-time 600 --output build/virtio-win.iso $url
+          if ($LASTEXITCODE) { throw 'Official ISO download failed.' }
+          if ((Get-Item build/virtio-win.iso).Length -ne 877373440) { throw 'Unexpected ISO size.' }
+          $sha = (Get-FileHash build/virtio-win.iso -Algorithm SHA256).Hash.ToLower()
+          @{source_url=$url; iso_sha256=$sha; architecture='ARM64'; direct3d=$false; purpose='WDDM display modes and scanout'} |
+            ConvertTo-Json | Set-Content build/virtio-display/SOURCE.json -Encoding utf8
+      - name: Extract ARM64 display driver and verify kernel signature
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & 'C:/Program Files/7-Zip/7z.exe' x build/virtio-win.iso '-obuild/virtio-extract' 'viogpudo/*' -y
+          if ($LASTEXITCODE) { throw 'Driver extraction failed.' }
+          $infs = @(Get-ChildItem build/virtio-extract -Recurse -Filter viogpudo.inf | Where-Object FullName -Match '(?i)[\\/]ARM64[\\/]')
+          $inf = $infs | Where-Object FullName -Match '(?i)[\\/]w11[\\/]' | Select-Object -First 1
+          if (-not $inf) { $inf = $infs | Where-Object FullName -Match '(?i)[\\/]w10[\\/]' | Select-Object -First 1 }
+          if (-not $inf) { throw 'Official ISO has no matching Windows ARM64 display driver.' }
+          Copy-Item "$($inf.DirectoryName)/*" build/virtio-display -Include '*.inf','*.cat','*.sys'
+          $sys = 'build/virtio-display/viogpudo.sys'
+          $bytes = [IO.File]::ReadAllBytes((Resolve-Path $sys))
+          $pe = [BitConverter]::ToInt32($bytes,60)
+          if ([BitConverter]::ToUInt16($bytes,$pe+4) -ne 0xAA64) { throw 'Wrong PE architecture.' }
+          $sign = Get-ChildItem "${env:ProgramFiles(x86)}/Windows Kits/10/bin" -Recurse -Filter signtool.exe |
+            Where-Object FullName -Match '[\\/]x64[\\/]' | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $sign) { throw 'Windows SDK SignTool unavailable.' }
+          & $sign.FullName verify /kp /v /c build/virtio-display/viogpudo.cat $sys
+          if ($LASTEXITCODE) { throw 'Kernel signing policy or catalog membership verification failed.' }
+          Get-ChildItem build/virtio-display -File | Sort-Object Name | ForEach-Object {
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
+          } | Set-Content build/virtio-display/SHA256SUMS.txt -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-virtio-display-arm64
+          path: build/virtio-display/
+          retention-days: 14
