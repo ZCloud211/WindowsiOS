@@ -1,0 +1,58 @@
+{
+  "repository": "https://github.com/microsoft/Windows-driver-samples",
+  "reference_commit": "d49bb7d72f3651952b2b6e4ad28d14fe2247eb69",
+  "path": "video/KMDOD",
+  "license": "MS-PL",
+  "files": [
+    {
+      "path": "bdd.cxx",
+      "upstream_blob": "ec36f7498a61e83c9409fccd8fdd5e2e36a0d2ba"
+    },
+    {
+      "path": "bdd.hxx",
+      "upstream_blob": "8fd3cdbb0c22f546397a9befbfe4b0a691d8a983"
+    },
+    {
+      "path": "bdd_ddi.cxx",
+      "upstream_blob": "f5f51cf8816a3fb8b97d04be3ccc99890e1d9fad"
+    },
+    {
+      "path": "bdd_dmm.cxx",
+      "upstream_blob": "95c59538f1a49eec7ec75859dd52920ab73c616b"
+    },
+    {
+      "path": "bdd_errorlog.hxx",
+      "upstream_blob": "f9c394f83e073bad64d2d6a342dab2037af25ac3"
+    },
+    {
+      "path": "bdd_util.cxx",
+      "upstream_blob": "78f6653175b165e070979aaec3070936df578c1a"
+    },
+    {
+      "path": "bltfuncs.cxx",
+      "upstream_blob": "9df7ee6b8af88173f093b481773f4a516c1cd587"
+    },
+    {
+      "path": "blthw.cxx",
+      "upstream_blob": "f9e8a51bb2f25933207e5305c5ef2e44225a922b"
+    },
+    {
+      "path": "memory.cxx",
+      "upstream_blob": "54f6a6dc01df53afa0c36c818abe90b56bd85837"
+    },
+    {
+      "path": "sampledisplay.rc",
+      "upstream_blob": "f495476d104f47c1ceb41daab5ed9f054102604d"
+    },
+    {
+      "path": "Sample/SampleDisplay.vcxproj",
+      "upstream_blob": "205b89c5aca9c06509ba886c593561a22e86dd7f"
+    }
+  ],
+  "local_changes": [
+    "WDDM escape and transport initialization/cleanup",
+    "Windows 8 display-only interface version",
+    "experimental GPU-only INF and target binary name",
+    "shared probe C source in project"
+  ]
+}

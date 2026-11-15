@@ -1,0 +1,10 @@
+<Project>
+  <!-- Based on Microsoft's Windows-driver-samples WDK NuGet build setup. -->
+  <PropertyGroup><GpuPackages>$(MSBuildThisFileDirectory)packages\</GpuPackages></PropertyGroup>
+  <Import Project="$(GpuPackages)Microsoft.Windows.WDK.arm64.10.0.28000.2526\build\native\Microsoft.Windows.WDK.arm64.props"
+          Condition="'$(Platform)' == 'ARM64' and Exists('$(GpuPackages)Microsoft.Windows.WDK.arm64.10.0.28000.2526\build\native\Microsoft.Windows.WDK.arm64.props')" />
+  <Import Project="$(GpuPackages)Microsoft.Windows.SDK.CPP.arm64.10.0.28000.2526\build\native\Microsoft.Windows.SDK.cpp.arm64.props"
+          Condition="'$(Platform)' == 'ARM64' and Exists('$(GpuPackages)Microsoft.Windows.SDK.CPP.arm64.10.0.28000.2526\build\native\Microsoft.Windows.SDK.cpp.arm64.props')" />
+  <Import Project="$(GpuPackages)Microsoft.Windows.SDK.CPP.10.0.28000.2526\build\native\Microsoft.Windows.SDK.cpp.props"
+          Condition="Exists('$(GpuPackages)Microsoft.Windows.SDK.CPP.10.0.28000.2526\build\native\Microsoft.Windows.SDK.cpp.props')" />
+</Project>

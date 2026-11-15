@@ -1,0 +1,42 @@
+name: Windows ARM64 GPU driver bring-up
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['gpu-driver-build/**']
+    paths: ['drivers/windows/**', 'gpu/**', '.github/workflows/windows-gpu.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  driver:
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - uses: NuGet/setup-nuget@v2
+      - name: Restore pinned WDK and SDK
+        run: nuget restore drivers/windows/packages.config -PackagesDirectory drivers/windows/packages -NonInteractive
+      - name: Compile ARM64 experimental WDDM driver
+        shell: pwsh
+        run: |
+          $out = "$env:GITHUB_WORKSPACE\build\windows-gpu\driver\"
+          msbuild drivers/windows/kmdod/Sample/SampleDisplay.vcxproj /t:Build /m /p:Configuration=Release /p:Platform=ARM64 /p:SignMode=Off "/p:OutDir=$out" /p:Inf2CatUseLocalTime=true /fl /flp:logfile=driver-build.log
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Compile ARM64 GPU probe
+        shell: pwsh
+        run: |
+          $out = "$env:GITHUB_WORKSPACE\build\windows-gpu\probe\"
+          msbuild drivers/windows/probe/WinGpuProbe.vcxproj /t:Build /m /p:Configuration=Release /p:Platform=ARM64 "/p:OutDir=$out" /fl /flp:logfile=probe-build.log
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-arm64-gpu-bringup
+          path: |
+            build/windows-gpu/
+            driver-build.log
+            probe-build.log
+          retention-days: 7

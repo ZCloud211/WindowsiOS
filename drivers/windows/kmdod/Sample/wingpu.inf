@@ -1,0 +1,36 @@
+; WindowsiOS GPU transport bring-up only. No broad PCI class matching.
+[Version]
+Signature="$Windows NT$"
+Class=Display
+ClassGUID={4d36e968-e325-11ce-bfc1-08002be10318}
+Provider=%Provider%
+DriverVer=11/15/2026,0.0.1.0
+CatalogFile=WinIOSGpuProbe.cat
+PnpLockdown=1
+
+[Manufacturer]
+%Provider%=Devices,NTarm64
+[Devices.NTarm64]
+%Name%=Install,PCI\VEN_1B36&DEV_FF10
+[DestinationDirs]
+DriverFiles=12
+[SourceDisksNames]
+1=%Disk%
+[SourceDisksFiles]
+WinIOSGpuProbe.sys=1
+[Install]
+FeatureScore=F9
+CopyFiles=DriverFiles
+[Install.Services]
+AddService=WinIOSGpuProbe,0x00000002,Service
+[DriverFiles]
+WinIOSGpuProbe.sys
+[Service]
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\WinIOSGpuProbe.sys
+[Strings]
+Provider="WindowsiOS development"
+Name="WindowsiOS GPU Transport Probe"
+Disk="WindowsiOS experimental GPU driver"
