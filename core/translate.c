@@ -357,8 +357,8 @@ static uint64_t cross_addend(Emit *e, uint64_t target) {
     if (w.fsc || w.block_size < (1ull << HV_TLB_PAGE_BITS)) return 0;
     uint64_t page_pa = w.pa & ~((1ull << HV_TLB_PAGE_BITS) - 1);
     HvRam *ram = hv_ram_lookup(e->m, page_pa);
-    if (!ram || page_pa + (1ull << HV_TLB_PAGE_BITS) - ram->pa > ram->size) return 0;
-    return (uint64_t)(uintptr_t)(ram->host + (page_pa - ram->pa)) - (target & ~((1ull << HV_TLB_PAGE_BITS) - 1));
+    if (!ram || ram->page_host || page_pa + (1ull << HV_TLB_PAGE_BITS) - hv_ram_base(ram) > ram->size) return 0;
+    return (uint64_t)(uintptr_t)(ram->host + (page_pa - hv_ram_base(ram))) - (target & ~((1ull << HV_TLB_PAGE_BITS) - 1));
 }
 
 static int use_xjump(void) {

@@ -91,6 +91,8 @@ static void ged_write(void *opaque, uint64_t off, uint64_t v, unsigned size) {
 
 static uint64_t tick_locked(HvMachine *m, HvCpu *cpu) {
     HvWinVirt *b = m->tick_opaque;
+    if (b->wingpu) hv_wingpu_poll(b->wingpu);
+    if (b->display_gpu) hv_virtio_gpu_poll(b->display_gpu);
     uint64_t deadline = hv_timer_update(b->gic, cpu);
     if (cpu->index != 0) return deadline;
     hv_pl031_tick(b->rtc);
@@ -186,7 +188,9 @@ int hv_winvirt_create(HvWinVirt *b, HvMachine *m, HvCpu *cpu, int ncpus, uint64_
 
     b->fw_cfg = hv_fw_cfg_create(m, WINVIRT_FW_CFG_PA, (uint16_t)ncpus);
     b->fb = hv_fb_display_create(m, b->fw_cfg);
-    hv_acpi_build_and_register(b->fw_cfg, b->ncpus, ram_size, 0, 0);
+    HvHostIdentity identity;
+    hv_host_identity_detect(&identity);
+    hv_acpi_build_and_register(b->fw_cfg, b->ncpus, ram_size, 0, 0, &identity);
 
     /* 7. PCIe Root Complex (GPEX):
      *    Slot 0: Host Bridge (1b36:0008)
@@ -208,6 +212,12 @@ int hv_winvirt_create(HvWinVirt *b, HvMachine *m, HvCpu *cpu, int ncpus, uint64_
     b->usb = hv_xhci_create(m, b->pcie);
     b->hda = hv_hda_create(m, b->pcie);
     if (disk1) b->nvme1 = hv_nvme_create(m, b->pcie, disk1, "WIN11INST");
+    const char *display_gpu = getenv("HV_VIRTIO_GPU");
+    if (display_gpu && !strcmp(display_gpu,"1")) b->display_gpu = hv_virtio_gpu_create(m,b->pcie,b->fb);
+    /* Only explicit developer sessions enumerate the unfinished Windows GPU.
+     * Existing Windows installations keep their known working boot display. */
+    const char *gpu_probe = getenv("HV_WINGPU_PROBE");
+    if (gpu_probe && !strcmp(gpu_probe, "1")) b->wingpu = hv_wingpu_create(m, b->pcie);
     (void)enable_sound;
 
     m->tick = tick;

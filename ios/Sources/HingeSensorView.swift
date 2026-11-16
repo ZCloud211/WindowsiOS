@@ -111,6 +111,7 @@ enum SceneOrientationController {
     /// When entering Laptop Mode on the unfolded iPhone Duo inner canvas (951x669 -> 669x951),
     /// rotate to Portrait so the physical hinge runs horizontally between the top screen and bottom keyboard deck.
     static func alignForLaptopPostureIfLandscape(size: CGSize) {
+        guard UIDevice.current.userInterfaceIdiom != .pad else { return }
         guard size.width > size.height, max(size.width, size.height) > 780 else { return }
         guard let scene = activeWindowScene() else { return }
         currentPreferred = .portrait
@@ -163,6 +164,8 @@ final class HingeObserverViewController: UIViewController {
     private func installHingeObserverIfAvailable() {
         guard !didInstallHinge else { return }
         didInstallHinge = true
+        // New SDK symbols must also be excluded at compile time on Xcode 16.
+        #if WINIOS_ENABLE_HINGE
         guard NSClassFromString("UIHingeInteraction") != nil else { return }
         if #available(iOS 27.1, *) {
             let interaction = UIHingeInteraction { [weak self] _, update in
@@ -179,6 +182,7 @@ final class HingeObserverViewController: UIViewController {
             }
             view.addInteraction(interaction)
         }
+        #endif
     }
 }
 

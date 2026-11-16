@@ -11,7 +11,7 @@ typedef struct HvWinVmConfig {
     const char *code_fd;      /* 64 MB EDK2 UEFI firmware (read-only) */
     const char *vars_fd;      /* 64 MB UEFI NVRAM (read/write persistent) */
     const char *disk0;        /* Primary NVMe disk image (raw or .hvsparse) */
-    const char *disk1;        /* Optional secondary/installer NVMe disk image (read-only) */
+    const char *disk1;        /* Optional secondary/installer NVMe disk image (read/write) */
     const char *share_dir;    /* Optional host folder shared over WebDAV at http://10.0.2.4/ */
     const char *share_sock;   /* Path for internal WebDAV Unix domain socket */
     int ncpus;
@@ -37,6 +37,7 @@ void hv_winvm_flush_disks(void);
 void hv_winvm_set_display_layer(void *ca_metal_layer);
 int hv_winvm_display_size(uint32_t *w, uint32_t *h);
 uint64_t hv_winvm_display_frames(void);
+void hv_winvm_graphics_stats(HvFbMetalStats *stats);
 int hv_winvm_save_png(const char *path);
 
 /* Input hooks (any thread) */
@@ -49,6 +50,8 @@ void hv_winvm_send_ctrl_alt_del(void);
 void hv_winvm_usb_stats(int *kbd_ready, int *tab_ready, uint64_t *delivered);
 void hv_winvm_engine_stats(uint64_t *jit_used_bytes, uint64_t *jit_cap_bytes,
                            uint64_t *jit_full_flushes, uint64_t *wfi_ticks);
+void hv_winvm_storage_stats(uint64_t *system_bytes, uint64_t *installer_bytes,
+                            uint64_t *system_read_bytes, uint64_t *installer_read_bytes);
 int hv_winvm_share_up(void);
 
 HvMachine *hv_winvm_machine(void);

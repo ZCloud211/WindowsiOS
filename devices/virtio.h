@@ -6,7 +6,7 @@
 #include "pcie.h"
 
 /* virtio 1.x over PCI (modern only, as vmapple sets disable-legacy), split
-   virtqueues, INTx interrupts. Requests are handled synchronously when the
+   virtqueues, INTx or optional MSI-X interrupts. Requests are handled synchronously when the
    driver notifies. */
 #define HV_VIRTQ_MAX 4
 #define HV_VIRTQ_MAX_SIZE 1024
@@ -15,7 +15,7 @@
 #define HV_VIRTIO_F_VERSION_1 (1ull << 32)
 
 typedef struct HvVirtq {
-    uint16_t size, enabled, last_avail;
+    uint16_t size, enabled, last_avail, msix_vector;
     uint64_t desc, avail, used;
     uint8_t out[HV_VIRTQ_MAX_SIZE]; /* heads taken and not yet completed (a completion twice corrupts the driver) */
 } HvVirtq;
@@ -38,12 +38,13 @@ typedef struct HvVirtio {
     uint64_t features, driver_features;
     uint32_t dfsel, gfsel;
     uint8_t status, isr, config_gen;
-    uint16_t qsel, nq;
+    uint16_t qsel, nq, config_msix_vector;
     HvVirtq q[HV_VIRTQ_MAX];
     uint8_t config[256];
     uint32_t config_len;
     void (*notify)(struct HvVirtio *v, int q);
     void (*config_write)(struct HvVirtio *v, uint32_t off, uint64_t val, unsigned size);
+    void (*reset)(struct HvVirtio *v);
     void *dev;
 } HvVirtio;
 
@@ -55,6 +56,7 @@ void hv_virtio_init(HvVirtio *v, HvMachine *m, int device_id, uint32_t class_cod
 int hv_virtq_pop(HvVirtio *v, int q, HvVirtqElem *e);
 void hv_virtq_push(HvVirtio *v, int q, const HvVirtqElem *e, uint32_t written);
 void hv_virtio_interrupt(HvVirtio *v);
+void hv_virtio_queue_interrupt(HvVirtio *v, int q);
 
 /* Copy between an element's buffers and host memory, skipping `off` bytes of
    the readable (to) or writable (from) segments. Return bytes copied. */

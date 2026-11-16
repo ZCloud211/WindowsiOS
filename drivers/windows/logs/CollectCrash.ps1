@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+﻿# SPDX-License-Identifier: MIT
 # Read Windows diagnostics; write only beside this tool on the removable image.
 # No driver installation, registry writes, restart, or signing-policy changes.
 param([string]$OutputRoot = '', [switch]$NoElevation, [switch]$NoFlush, [switch]$NoDumps)
@@ -45,6 +45,10 @@ Read-Command 'EVENTS.TXT' 'wevtutil.exe' @('qe','System',"/q:$query",'/rd:true',
 Write-Host '正在读取显示设备及转储设置…'
 Read-Command 'DISPLAY.TXT' 'pnputil.exe' @('/enum-devices','/class','Display','/drivers')
 Read-Command 'DRIVERS.TXT' 'pnputil.exe' @('/enum-drivers')
+$installLog=Join-Path $env:SystemDrive 'WINIOS3D\INSTALL.LOG'
+if((Test-Path -LiteralPath $installLog -PathType Leaf) -and (Get-Item -LiteralPath $installLog).Length -le 1MB) {
+    Copy-Item -LiteralPath $installLog -Destination (Join-Path $destination 'NEPTUNE_INSTALL.LOG')
+}
 Read-Command 'CRASHCFG.TXT' 'reg.exe' @('query','HKLM\SYSTEM\CurrentControlSet\Control\CrashControl')
 try {
     $source=Join-Path $PSScriptRoot 'DisplayTopology.cs'

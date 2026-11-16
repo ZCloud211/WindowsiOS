@@ -12,6 +12,15 @@ final class MetalCanvasUIView: UIView, UIKeyInput {
     var rightClickArmed: Bool = false
     var onRightClickConsumed: (() -> Void)?
     var onThreeFingerTap: (() -> Void)?
+    var capturesKeyboard = false
+    var softwareKeyboardRequested = false {
+        didSet {
+            if oldValue != softwareKeyboardRequested && isFirstResponder { reloadInputViews() }
+        }
+    }
+    private let hiddenKeyboard = UIView(frame: .zero)
+    override var inputView: UIView? { softwareKeyboardRequested ? nil : hiddenKeyboard }
+    private var heldKeys = Set<UInt8>()
 
     private var activeDragButtons: UInt8 = 0
     private var panLastPoint: CGPoint = .zero
@@ -42,6 +51,11 @@ final class MetalCanvasUIView: UIView, UIKeyInput {
         let singleTap = UITapGestureRecognizer(target: self, action: #selector(handleSingleTap(_:)))
         singleTap.numberOfTouchesRequired = 1
         addGestureRecognizer(singleTap)
+
+        let secondaryClick = UITapGestureRecognizer(target: self, action: #selector(handleSecondaryClick(_:)))
+        secondaryClick.buttonMaskRequired = .secondary
+        secondaryClick.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirectPointer.rawValue)]
+        addGestureRecognizer(secondaryClick)
 
         let twoFingerTap = UITapGestureRecognizer(target: self, action: #selector(handleTwoFingerTap(_:)))
         twoFingerTap.numberOfTouchesRequired = 2
@@ -80,6 +94,7 @@ final class MetalCanvasUIView: UIView, UIKeyInput {
         updateDrawableScale()
         if window != nil {
             WinIOSBridge.shared.bindMetalLayer(metalLayer)
+            if capturesKeyboard { _ = becomeFirstResponder() }
         }
     }
 
@@ -140,6 +155,12 @@ final class MetalCanvasUIView: UIView, UIKeyInput {
             let (nx, ny) = normalizedPoint(for: gr.location(in: self))
             PointerController.shared.directTapAt(x: nx, y: ny, buttonMask: mask)
         }
+    }
+
+    @objc private func handleSecondaryClick(_ gr: UITapGestureRecognizer) {
+        guard gr.state == .ended else { return }
+        let (nx, ny) = normalizedPoint(for: gr.location(in: self))
+        PointerController.shared.directTapAt(x: nx, y: ny, buttonMask: 2)
     }
 
     @objc private func handleTwoFingerTap(_ gr: UITapGestureRecognizer) {
@@ -232,6 +253,11 @@ final class MetalCanvasUIView: UIView, UIKeyInput {
     // MARK: - Software & Hardware Keyboard (USB HID Page 0x07)
 
     override var canBecomeFirstResponder: Bool { true }
+    override func resignFirstResponder() -> Bool {
+        for key in heldKeys { WinIOSBridge.shared.sendKeyHid(key, down: false) }
+        heldKeys.removeAll()
+        return super.resignFirstResponder()
+    }
     var hasText: Bool { true }
 
     func insertText(_ text: String) {
@@ -250,6 +276,7 @@ final class MetalCanvasUIView: UIView, UIKeyInput {
             if let key = press.key {
                 let code = key.keyCode.rawValue
                 if code >= 0x04 && code <= 0xe7 {
+                    heldKeys.insert(UInt8(code))
                     WinIOSBridge.shared.sendKeyHid(UInt8(code), down: true)
                     handled = true
                 }
@@ -264,6 +291,7 @@ final class MetalCanvasUIView: UIView, UIKeyInput {
             if let key = press.key {
                 let code = key.keyCode.rawValue
                 if code >= 0x04 && code <= 0xe7 {
+                    heldKeys.remove(UInt8(code))
                     WinIOSBridge.shared.sendKeyHid(UInt8(code), down: false)
                     handled = true
                 }
@@ -317,6 +345,7 @@ struct MetalDisplayView: UIViewRepresentable {
     @Binding var trackpadMode: Bool
     @Binding var rightClickArmed: Bool
     @Binding var keyboardVisible: Bool
+    var capturesKeyboard: Bool = true
     var onThreeFingerTap: () -> Void
 
     func makeUIView(context: Context) -> MetalCanvasUIView {
@@ -332,10 +361,13 @@ struct MetalDisplayView: UIViewRepresentable {
         uiView.trackpadMode = trackpadMode
         uiView.rightClickArmed = rightClickArmed
         uiView.onThreeFingerTap = onThreeFingerTap
-        if keyboardVisible && !uiView.isFirstResponder {
+        // Hardware keys need a first responder even with the onscreen keyboard hidden.
+        uiView.softwareKeyboardRequested = keyboardVisible
+        uiView.capturesKeyboard = capturesKeyboard
+        if !capturesKeyboard && uiView.isFirstResponder {
+            _ = uiView.resignFirstResponder()
+        } else if capturesKeyboard && uiView.window != nil && !uiView.isFirstResponder {
             DispatchQueue.main.async { _ = uiView.becomeFirstResponder() }
-        } else if !keyboardVisible && uiView.isFirstResponder {
-            DispatchQueue.main.async { _ = uiView.resignFirstResponder() }
         }
     }
 }

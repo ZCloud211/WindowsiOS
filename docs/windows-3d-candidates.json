@@ -1,0 +1,46 @@
+{
+  "recorded_date": "2026-11-16",
+  "target": {
+    "machine": "iPad13,4",
+    "chip": "Apple M1",
+    "os": "iPadOS 18.7.8",
+    "guest": "Windows 11 ARM64"
+  },
+  "status": "iOS native dependencies compiled; Windows integration under development, not device-validated",
+  "route": "Triton WDDM KMD + Neptune ARM64X UMD + shared batched transport + native DXMT on Metal",
+  "components": [
+    {
+      "component": "windows_kmd",
+      "url": "https://api.github.com/repos/osy/kvm-guest-drivers-windows/commits/v0.5",
+      "sha": "ed821008215ded87d2d03495240d5aad6d8e42ba",
+      "date": "2026-10-28T15:19:00Z",
+      "title": "viogpu3d: keep the monitor's identity across window sizes"
+    },
+    {
+      "component": "windows_umd",
+      "url": "https://api.github.com/repos/osy/virtio-win-mesa/commits?per_page=1",
+      "sha": "fc5f1fc8a389e125e7d5f979f7b88a2708d161ee",
+      "date": "2026-10-29T17:55:01Z",
+      "title": "triton: give pixel shaders full coverage under target-independent rasterization"
+    },
+    {
+      "component": "native_dxmt",
+      "url": "https://api.github.com/repos/utmapp/dxmt/commits?per_page=1",
+      "sha": "1fe2e752c98207518a99c9322482f63ebb9f0232",
+      "date": "2026-11-10T18:41:40Z",
+      "title": "d3d11: track all 32 vertex buffer slots"
+    },
+    {
+      "component": "neptune_renderer",
+      "url": "https://github.com/utmapp/virglrenderer/tree/dd0652b13e589c4c124ea79123a3adcd85173f4f",
+      "sha": "dd0652b13e589c4c124ea79123a3adcd85173f4f",
+      "note": "macos-next; paired with native DXMT by upstream build source list; built as iOS ARM64, same-process threads, no Venus/EGL"
+    }
+  ],
+  "limitations": [
+    "Transport, shared page aperture and Metal scanout are implemented in development; native renderer integration and guest D3D11/DWM remain unverified.",
+    "ARM64X covers native ARM64 and ARM64EC/x64-emulated UMD callers; 32-bit applications need a separate x86 UMD.",
+    "Initial iOS target is Direct3D 11; the macOS D3DMetal path is not an iPad runtime.",
+    "Pinned DXMT and renderer both use directx-native ABI 1; Windows v0.5 package is staged locally, not installed."
+  ]
+}

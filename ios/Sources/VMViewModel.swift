@@ -64,6 +64,21 @@ final class VMViewModel: ObservableObject {
     @Published var isDebuggerAttached: Bool = false
     @Published var isVMRunning: Bool = false
     @Published var isUnpacking: Bool = false
+    @Published var isImportingISO: Bool = false
+    @Published var installerReady: Bool = false
+    @Published var virtioDisplayEnabled: Bool = WinIOSBridge.shared.virtioDisplayEnabled {
+        didSet { WinIOSBridge.shared.virtioDisplayEnabled = virtioDisplayEnabled }
+    }
+    @Published var neptune3DEnabled: Bool = WinIOSBridge.shared.neptune3DEnabled {
+        didSet { WinIOSBridge.shared.neptune3DEnabled = neptune3DEnabled }
+    }
+    @Published var toolsDiskAttached: Bool = WinIOSBridge.shared.toolsDiskAttached {
+        didSet { WinIOSBridge.shared.toolsDiskAttached = toolsDiskAttached }
+    }
+    @Published var installerName: String = ""
+    @Published var installerAttached: Bool = WinIOSBridge.shared.installerAttached {
+        didSet { WinIOSBridge.shared.installerAttached = installerAttached }
+    }
     @Published var unpackProgress: Double = 0
     @Published var jitStatusText: String = "Checking JIT..."
     @Published var vmStatusText: String = "Initializing..."
@@ -71,6 +86,12 @@ final class VMViewModel: ObservableObject {
     @Published var fbHeight: UInt32 = 0
     @Published var presentedFrames: UInt64 = 0
     @Published var availableMemoryMB: UInt64 = 0
+    @Published var guestMemoryMB: UInt64 = WinIOSBridge.shared.requestedMemoryMB {
+        didSet { WinIOSBridge.shared.requestedMemoryMB = guestMemoryMB }
+    }
+    @Published var firmwareOnly: Bool = WinIOSBridge.shared.firmwareOnly {
+        didSet { WinIOSBridge.shared.firmwareOnly = firmwareOnly }
+    }
 
     @Published var usbKeyboardReady: Bool = false
     @Published var usbTabletReady: Bool = false
@@ -82,7 +103,7 @@ final class VMViewModel: ObservableObject {
 
     @Published var postureMode: PostureMode = .auto
     @Published var deckLayout: DeckLayout = .split
-    @Published var controlBarVisible: Bool = true
+    @Published var controlBarVisible: Bool = UIDevice.current.userInterfaceIdiom != .pad
     @Published var trackpadMode: Bool = false
     @Published var rightClickArmed: Bool = false
     @Published var systemKeyboardVisible: Bool = false
@@ -140,6 +161,7 @@ final class VMViewModel: ObservableObject {
         case .fullScreen:
             return false
         case .auto:
+            if UIDevice.current.userInterfaceIdiom == .pad { return false }
             // Hardware hinge folded into laptop posture (partiallyOpen == 2, or live hinge angle 30°..166°)
             if hingeStatusRaw == 2 {
                 return true
@@ -226,6 +248,14 @@ final class VMViewModel: ObservableObject {
         isDebuggerAttached = b.isDebuggerAttached
         isVMRunning = b.isVMRunning
         isUnpacking = b.isUnpacking
+        isImportingISO = b.isImportingISO
+        installerReady = b.installerReady
+        virtioDisplayEnabled = b.virtioDisplayEnabled
+        neptune3DEnabled = b.neptune3DEnabled
+        toolsDiskAttached = b.toolsDiskAttached
+        installerName = b.installerName
+        installerAttached = b.installerAttached
+        firmwareOnly = b.firmwareOnly
         unpackProgress = b.unpackProgress
         jitStatusText = b.jitStatusText
         vmStatusText = b.vmStatusText
@@ -257,22 +287,44 @@ final class VMViewModel: ObservableObject {
         syncFromBridge()
     }
 
+    func importISO(_ result: Result<URL, Error>) {
+        switch result {
+        case .success(let url):
+            WinIOSBridge.shared.importISO(from: url)
+        case .failure(let error):
+            vmStatusText = "无法选择 ISO：\(error.localizedDescription)"
+        }
+    }
+
+    func cancelISOImport() { WinIOSBridge.shared.cancelISOImport() }
+
     func requestStikDebugJIT() {
         guard let bundleID = Bundle.main.bundleIdentifier else { return }
-        var urlStr = "stikjit://enable-jit?bundle-id=\(bundleID)&pid=\(getpid())"
-        if let scriptPath = Bundle.main.path(forResource: "henge-jit", ofType: "js"),
-           let script = try? String(contentsOfFile: scriptPath, encoding: .utf8),
-           let data = script.data(using: .utf8) {
-            let b64 = data.base64EncodedString()
-                .replacingOccurrences(of: "+", with: "-")
-                .replacingOccurrences(of: "/", with: "_")
-                .trimmingCharacters(in: CharacterSet(charactersIn: "="))
-            if let encoded = b64.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
-                urlStr += "&script-data=\(encoded)"
+        var components = URLComponents()
+        // Keep the original scheme for compatibility with installed StikDebug 18.x versions.
+        components.scheme = "stikjit"
+        components.host = "enable-jit"
+        components.queryItems = [
+            URLQueryItem(name: "bundle-id", value: bundleID),
+            URLQueryItem(name: "pid", value: String(getpid()))
+        ]
+        // iPadOS 18 needs an ordinary attach/detach, without a breakpoint script.
+        if #available(iOS 26.0, *) {
+            guard let scriptURL = Bundle.main.url(forResource: "henge-jit", withExtension: "js"),
+                  let data = try? Data(contentsOf: scriptURL) else {
+                jitStatusText = "Missing JIT script. Reinstall the app."
+                return
             }
+            components.queryItems?.append(URLQueryItem(name: "script-data", value: data.base64EncodedString()))
         }
-        if let url = URL(string: urlStr) {
-            UIApplication.shared.open(url, options: [:], completionHandler: nil)
+        if let url = components.url {
+            UIApplication.shared.open(url, options: [:]) { [weak self] opened in
+                if !opened {
+                    Task { @MainActor in
+                        self?.jitStatusText = "Open StikDebug and enable JIT for Windows 11."
+                    }
+                }
+            }
         }
     }
 }

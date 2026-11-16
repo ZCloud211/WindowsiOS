@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 struct SessionView: View {
     @ObservedObject var vm: VMViewModel
     private let uiHaptic = UIImpactFeedbackGenerator(style: .light)
+    @State private var showISOImporter = false
 
     var body: some View {
         GeometryReader { geo in
@@ -30,18 +32,24 @@ struct SessionView: View {
                 }
 
                 if !vm.isVMRunning {
-                    surfaceHeroBootOverlay(viewportSize: size, laptopActive: laptopActive)
-                        .padding(20)
-                        .frame(
-                            maxWidth: .infinity,
-                            maxHeight: laptopActive ? size.height * 0.50 : .infinity,
-                            alignment: .center
-                        )
-                        .frame(maxHeight: .infinity, alignment: laptopActive ? .top : .center)
+                    ScrollView {
+                        surfaceHeroBootOverlay(viewportSize: size, laptopActive: laptopActive)
+                            .padding(20)
+                            .frame(maxWidth: .infinity)
+                            .frame(minHeight: max(1, laptopActive ? size.height * 0.5 : size.height))
+                    }
+                    .frame(maxHeight: laptopActive ? size.height * 0.5 : .infinity)
+                    .frame(maxHeight: .infinity, alignment: laptopActive ? .top : .center)
                 }
             }
             .onChange(of: size) { _, newSize in
                 WinIOSBridge.shared.updateScreenSize(newSize, scale: UIScreen.main.scale)
+            }
+            .onChange(of: vm.isVMRunning) { _, running in
+                if running && UIDevice.current.userInterfaceIdiom == .pad {
+                    vm.postureMode = .fullScreen
+                    vm.controlBarVisible = false
+                }
             }
             .sheet(item: $vm.activeSafariURL) { item in
                 SafariSheet(url: item.url)
@@ -53,6 +61,9 @@ struct SessionView: View {
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
         .defersSystemGestures(on: .all)
+        .fileImporter(isPresented: $showISOImporter, allowedContentTypes: [UTType(filenameExtension: "iso") ?? .data]) { result in
+            vm.importISO(result)
+        }
     }
 
     // MARK: - 1. Sleek Midnight-Sapphire Surface Laptop Ultra Clamshell Mode (Folded)
@@ -125,6 +136,7 @@ struct SessionView: View {
                         trackpadMode: $vm.trackpadMode,
                         rightClickArmed: $vm.rightClickArmed,
                         keyboardVisible: .constant(false),
+                        capturesKeyboard: vm.isVMRunning && vm.activeSafariURL == nil,
                         onThreeFingerTap: {
                             withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
                                 vm.postureMode = .fullScreen
@@ -188,10 +200,24 @@ struct SessionView: View {
         let safeBottom = max(geo.safeAreaInsets.bottom + 8.0, 12.0)
 
         ZStack {
-            // Sculpted Obsidian-Sapphire Studio Backdrop (eliminates dead-flat black letterbox bars!)
-            studioObsidianBackdrop(size: geo.size)
+            if UIDevice.current.userInterfaceIdiom != .pad {
+                studioObsidianBackdrop(size: geo.size)
+            }
 
-            if isPortrait {
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                MetalDisplayView(
+                    trackpadMode: $vm.trackpadMode,
+                    rightClickArmed: $vm.rightClickArmed,
+                    keyboardVisible: $vm.systemKeyboardVisible,
+                    capturesKeyboard: vm.isVMRunning && vm.activeSafariURL == nil,
+                    onThreeFingerTap: {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.86)) {
+                            vm.controlBarVisible.toggle()
+                        }
+                    }
+                )
+                .frame(width: w, height: h)
+            } else if isPortrait {
                 // Unfolded Portrait Studio Canvas: Framed PixelSense Display + Sleek Studio Telemetry & Quick Deck
                 VStack(spacing: 14) {
                     Spacer(minLength: safeTop + (vm.controlBarVisible ? 44 : 8))
@@ -223,7 +249,7 @@ struct SessionView: View {
                         .padding(.top, safeTop)
                         .padding(.horizontal, 14)
                         .transition(.move(edge: .top).combined(with: .opacity))
-                } else {
+                } else if UIDevice.current.userInterfaceIdiom != .pad {
                     HStack {
                         Spacer()
                         Button {
@@ -299,6 +325,7 @@ struct SessionView: View {
                 trackpadMode: $vm.trackpadMode,
                 rightClickArmed: $vm.rightClickArmed,
                 keyboardVisible: $vm.systemKeyboardVisible,
+                capturesKeyboard: vm.isVMRunning && vm.activeSafariURL == nil,
                 onThreeFingerTap: {
                     withAnimation(.spring(response: 0.25, dampingFraction: 0.86)) {
                         vm.controlBarVisible.toggle()
@@ -328,7 +355,7 @@ struct SessionView: View {
     private func surfaceStudioFooterStrip(viewportSize: CGSize) -> some View {
         VStack(spacing: 10) {
             HStack {
-                Text("DEVICE_NAME = SURFACE_DUO_ULTRA")
+                Text(UIDevice.current.userInterfaceIdiom == .pad ? "WINDOWS ON IPAD" : "WINDOWS ARM64")
                     .font(.system(size: 9.5, weight: .medium, design: .monospaced))
                     .tracking(1.1)
                     .foregroundStyle(Color(red: 0.72, green: 0.80, blue: 0.95).opacity(0.55))
@@ -339,7 +366,7 @@ struct SessionView: View {
                     Circle()
                         .fill(vm.isJITLive ? Color.white.opacity(0.75) : Color.orange)
                         .frame(width: 4.5, height: 4.5)
-                    Text("WIN11 ARM64 · 4.5 GB")
+                    Text("WIN11 ARM64 · \(WinIOSBridge.shared.configuredMemoryMB) MiB")
                         .font(.system(size: 9.5, weight: .medium, design: .monospaced))
                         .foregroundStyle(Color.white.opacity(0.45))
                 }
@@ -566,13 +593,13 @@ struct SessionView: View {
         VStack(spacing: laptopActive ? 11 : 16) {
             HStack(spacing: 9) {
                 WindowsLogoMark(size: laptopActive ? 14 : 17, color: .white)
-                Text("SURFACE LAPTOP ULTRA")
+                Text(UIDevice.current.userInterfaceIdiom == .pad ? "WINDOWS ON IPAD" : "WINDOWS ARM64")
                     .font(.system(size: laptopActive ? 13.5 : 15.5, weight: .semibold, design: .monospaced))
                     .tracking(2.0)
                     .foregroundStyle(.white)
             }
 
-            Text("DEVICE_NAME = IPHONE_DUO_ARM64")
+            Text("\(UIDevice.current.model) · \(UIDevice.current.systemName) \(UIDevice.current.systemVersion)")
                 .font(.system(size: 10, weight: .regular, design: .monospaced))
                 .tracking(1.4)
                 .foregroundStyle(Color(red: 0.72, green: 0.82, blue: 1.0).opacity(0.65))
@@ -586,6 +613,10 @@ struct SessionView: View {
                 ProgressView(value: vm.unpackProgress, total: 1.0)
                     .tint(.white)
                     .frame(maxWidth: 260)
+                if vm.isImportingISO {
+                    Button("取消导入") { vm.cancelISOImport() }
+                        .font(.system(size: 12))
+                }
             }
 
             HStack(spacing: 14) {
@@ -593,7 +624,7 @@ struct SessionView: View {
                     Circle()
                         .fill(vm.isJITLive ? Color.white : Color.orange)
                         .frame(width: 5.5, height: 5.5)
-                    Text(vm.isJITLive ? "TXM JIT LIVE" : vm.jitStatusText.uppercased())
+                    Text(vm.isJITLive ? "JIT READY" : vm.jitStatusText.uppercased())
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .foregroundStyle(.white.opacity(0.80))
                 }
@@ -607,6 +638,60 @@ struct SessionView: View {
             }
 
             if !vm.isUnpacking {
+                Button {
+                    showISOImporter = true
+                } label: {
+                    Label("导入 Windows ARM64 ISO", systemImage: "opticaldisc")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+                if vm.installerReady {
+                    Toggle("挂载安装盘", isOn: $vm.installerAttached)
+                        .font(.system(size: 12))
+                        .tint(.blue)
+                    Text(vm.installerName + " · 安装完成后关闭挂载，直接从系统盘启动。")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                Toggle("UEFI test (no Windows disk required)", isOn: $vm.firmwareOnly)
+                    .font(.system(size: 12))
+                    .tint(.blue)
+                Toggle("VirtIO 显示设备", isOn: $vm.virtioDisplayEnabled)
+                    .font(.system(size: 12))
+                    .tint(.blue)
+                    .disabled(vm.isVMRunning || vm.isUnpacking || vm.isImportingISO || vm.firmwareOnly)
+                Toggle("3D 加速（D3D11 预览）", isOn: $vm.neptune3DEnabled)
+                    .font(.system(size: 12))
+                    .tint(.blue)
+                    .disabled(vm.isVMRunning || vm.isUnpacking || vm.isImportingISO || vm.firmwareOnly || !vm.virtioDisplayEnabled)
+                if vm.neptune3DEnabled {
+                    Text("需在 Windows 中安装驱动盘内的 3D 显示驱动。")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                Toggle("挂载驱动／日志盘", isOn: $vm.toolsDiskAttached)
+                    .font(.system(size: 12))
+                    .tint(.blue)
+                    .disabled(vm.isVMRunning || vm.isUnpacking || vm.isImportingISO || vm.installerAttached || vm.firmwareOnly)
+                Text(vm.installerAttached
+                    ? "请先关闭安装盘挂载。"
+                    : "日志盘可单独挂载；打开 WINIOSDRV，双击“一键收集日志.cmd”。")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                if !vm.firmwareOnly {
+                    Picker("Guest memory", selection: $vm.guestMemoryMB) {
+                        Text("2 GiB").tag(UInt64(2048))
+                        Text("3 GiB").tag(UInt64(3072))
+                        Text("4 GiB").tag(UInt64(4096))
+                    }
+                    .pickerStyle(.segmented)
+                    Text("Use 4 GiB for Windows 11. Smaller sizes are for testing.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
                 HStack(spacing: 10) {
                     if !vm.isJITLive {
                         Button {
@@ -627,7 +712,7 @@ struct SessionView: View {
                     Button {
                         vm.startOrRetry()
                     } label: {
-                        Text(vm.isJITLive ? "BOOT WINDOWS 11" : "RETRY BOOT")
+                        Text(vm.firmwareOnly ? "BOOT UEFI" : (vm.isJITLive ? "BOOT WINDOWS 11" : "RETRY BOOT"))
                             .font(.system(size: 11, weight: .semibold, design: .monospaced))
                             .tracking(1.1)
                             .foregroundStyle(Color(red: 0.04, green: 0.05, blue: 0.09))

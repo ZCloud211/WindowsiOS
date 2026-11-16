@@ -2,8 +2,13 @@
 build/
 work/
 ios/deps/
+ios/Sources/Resources/Firmware/
+ios/Sources/Resources/Licenses/
 ios/*.xcodeproj
 ios/DerivedData/
+drivers/windows/packages/
+drivers/windows/**/ARM64/
+drivers/windows/**/x64/
 
 # App bundles & object archives
 *.ipa
@@ -37,7 +42,12 @@ ios/DerivedData/
 *.obj
 *.lib
 
+# Generated and verified Windows GPU diagnostic media staged by the build.
+/ios/Sources/Resources/GpuDiagnostics/
+
 # Python & macOS metadata
 __pycache__/
 *.pyc
 .DS_Store
+
+/ios/Sources/Resources/DisplayDrivers/

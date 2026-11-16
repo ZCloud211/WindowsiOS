@@ -261,6 +261,8 @@ void hv_machine_free(HvMachine *m) {
     for (int i = 0; i < m->nram; i++) {
         free(m->ram[i].code_pages);
         free(m->ram[i].page_gen);
+        free(m->ram[i].whint);
+        free(m->ram[i].page_host);
     }
     free(m->blocks);
     for (int i = 0; i < HV_MAX_CPUS; i++) {
@@ -310,7 +312,7 @@ int hv_machine_add_mmio(HvMachine *m, uint64_t pa, uint64_t size, void *opaque,
 HvRam *hv_ram_lookup(HvMachine *m, uint64_t pa) {
     for (int i = 0; i < m->nram; i++) {
         HvRam *r = &m->ram[i];
-        if (pa - r->pa < r->size) return r;
+        if (pa - hv_ram_base(r) < r->size) return r;
     }
     return NULL;
 }
@@ -322,7 +324,8 @@ uint64_t hv_smc_pages, hv_smc_cpu, hv_smc_dma;
 void hv_invalidate_code(HvMachine *m, uint64_t pa) {
     HvRam *r = hv_ram_lookup(m, pa);
     if (!r) return;
-    uint64_t pg = (pa - r->pa) >> HV_TLB_PAGE_BITS;
+    if(r->page_host)return;
+    uint64_t pg = (pa - hv_ram_base(r)) >> HV_TLB_PAGE_BITS;
     if (!r->code_pages[pg]) return;
     /* Blocks remember the generation they were made under; a stale one is
        retranslated the next time it is looked up. The block running now may
@@ -341,7 +344,7 @@ void hv_invalidate_code(HvMachine *m, uint64_t pa) {
        (whose next chain finds the new translation). Under the translation lock,
        as chaining them is: one that saw the old generation is done by now. */
     pthread_mutex_lock(&m->tr_mu);
-    uint64_t tpa = (r->pa + (pg << HV_TLB_PAGE_BITS)) | 1;
+    uint64_t tpa = (hv_ram_base(r) + (pg << HV_TLB_PAGE_BITS)) | 1;
     for (uint32_t k = 0; k < m->nxchained;) {
         uint32_t idx = m->xchained[k];
         if (m->slot_xpa[idx] != tpa) {
@@ -382,10 +385,10 @@ void hv_invalidate_code(HvMachine *m, uint64_t pa) {
 
 void hv_dma_written(HvMachine *m, uint64_t pa, uint64_t len) {
     HvRam *r = hv_ram_lookup(m, pa);
-    if (!r || !len || pa + len - r->pa > r->size) return;
-    uint64_t first = (pa - r->pa) >> HV_TLB_PAGE_BITS, last = (pa + len - 1 - r->pa) >> HV_TLB_PAGE_BITS;
+    if (!r || r->page_host || !len || pa + len - hv_ram_base(r) > r->size) return;
+    uint64_t first = (pa - hv_ram_base(r)) >> HV_TLB_PAGE_BITS, last = (pa + len - 1 - hv_ram_base(r)) >> HV_TLB_PAGE_BITS;
     for (uint64_t pg = first; pg <= last; pg++)
-        if (__atomic_load_n(&r->code_pages[pg], __ATOMIC_ACQUIRE)) hv_invalidate_code(m, r->pa + (pg << HV_TLB_PAGE_BITS));
+        if (__atomic_load_n(&r->code_pages[pg], __ATOMIC_ACQUIRE)) hv_invalidate_code(m, hv_ram_base(r) + (pg << HV_TLB_PAGE_BITS));
 }
 
 HvMmio *hv_mmio_lookup(HvMachine *m, uint64_t pa) {
@@ -396,10 +399,35 @@ HvMmio *hv_mmio_lookup(HvMachine *m, uint64_t pa) {
     return NULL;
 }
 
+void *hv_ram_pointer(HvRam *r, uint64_t off, uint64_t len) {
+    if (!r || off >= r->size || len > r->size-off) return NULL;
+    if (!r->page_host) return r->host+off;
+    const uint64_t mask=(1u<<HV_TLB_PAGE_BITS)-1;
+    uint8_t *first=__atomic_load_n(&r->page_host[off>>HV_TLB_PAGE_BITS],__ATOMIC_ACQUIRE);
+    if (!first) return NULL;
+    uint64_t base=off&~mask;
+    if (len) for(uint64_t next=base+mask+1;next<off+len;next+=mask+1) {
+        uint8_t *page=__atomic_load_n(&r->page_host[next>>HV_TLB_PAGE_BITS],__ATOMIC_ACQUIRE);
+        if (!page || (uintptr_t)page!=(uintptr_t)first+next-base) return NULL;
+    }
+    return first+(off&mask);
+}
 void *hv_phys_ptr(HvMachine *m, uint64_t pa, uint64_t len) {
-    HvRam *r = hv_ram_lookup(m, pa);
-    if (!r || pa + len - r->pa > r->size) return NULL;
-    return r->host + (pa - r->pa);
+    HvRam *r=hv_ram_lookup(m,pa);
+    return r?hv_ram_pointer(r,pa-hv_ram_base(r),len):NULL;
+}
+void hv_machine_memory_changed(HvMachine *m,uint64_t tickets[HV_MAX_CPUS]) {
+    memset(tickets,0,sizeof(uint64_t)*HV_MAX_CPUS);
+    for(int i=0;i<m->ncpus;i++) if(m->cpus[i]) {
+        tickets[i]=hv_cpu_post(m->cpus[i],HV_REQ_TLB_ALL);
+        if(m->cpus[i]==hv_self)hv_cpu_process_requests(hv_self);
+        else hv_cpu_wake(m->cpus[i]);
+    }
+}
+int hv_machine_memory_ready(HvMachine *m,const uint64_t tickets[HV_MAX_CPUS]) {
+    for(int i=0;i<m->ncpus;i++) if(tickets[i] && m->cpus[i] &&
+       __atomic_load_n(&m->cpus[i]->pc_state->ack_seq,__ATOMIC_ACQUIRE)<tickets[i])return 0;
+    return 1;
 }
 
 /* MMIO is accessed in naturally sized pieces of at most 8 bytes. */
@@ -407,6 +435,18 @@ int hv_phys_read(HvMachine *m, uint64_t pa, void *buf, unsigned len) {
     void *p = hv_phys_ptr(m, pa, len);
     if (p) {
         memcpy(buf, p, len);
+        return 0;
+    }
+    HvRam *mapped=hv_ram_lookup(m,pa);
+    if(mapped && mapped->page_host) {
+        if(!len || pa-hv_ram_base(mapped)>=mapped->size || len>mapped->size-(pa-hv_ram_base(mapped)))return -1;
+        unsigned done=0;
+        while(done<len) {
+            unsigned part=(1u<<HV_TLB_PAGE_BITS)-((pa+done)&((1u<<HV_TLB_PAGE_BITS)-1));
+            if(part>len-done)part=len-done;
+            void *page=hv_phys_ptr(m,pa+done,part);if(!page)return -1;
+            memcpy((uint8_t *)buf+done,page,part);done+=part;
+        }
         return 0;
     }
     HvMmio *d = hv_mmio_lookup(m, pa);
@@ -423,12 +463,13 @@ int hv_phys_read(HvMachine *m, uint64_t pa, void *buf, unsigned len) {
 
 int hv_phys_write(HvMachine *m, uint64_t pa, const void *buf, unsigned len) {
     HvRam *r = hv_ram_lookup(m, pa);
-    if (r && pa + len - r->pa <= r->size) {
+    uint64_t base=r?hv_ram_base(r):0;
+    if (r && pa>=base && pa-base<r->size && len<=r->size-(pa-base)) {
         if (r->readonly) return 0; /* ROM: writes are ignored */
-        uint64_t off = pa - r->pa;
+        uint64_t off = pa - base;
         uint64_t first = off >> HV_TLB_PAGE_BITS, last = (off + len - 1) >> HV_TLB_PAGE_BITS;
         for (uint64_t pg = first; pg <= last; pg++)
-            if (r->code_pages[pg]) hv_invalidate_code(m, r->pa + (pg << HV_TLB_PAGE_BITS)); /* a write to code */
+            if (r->code_pages[pg]) hv_invalidate_code(m, hv_ram_base(r) + (pg << HV_TLB_PAGE_BITS)); /* a write to code */
         if (m->watch_pa && m->watch_pa - pa < len) {
             uint64_t v = 0;
             memcpy(&v, (const uint8_t *)buf + (m->watch_pa - pa), len - (m->watch_pa - pa) < 8 ? len - (m->watch_pa - pa) : 8);
@@ -436,7 +477,15 @@ int hv_phys_write(HvMachine *m, uint64_t pa, const void *buf, unsigned len) {
                     (unsigned long long)m->watch_pa, (unsigned long long)v, len, (unsigned long long)pa,
                     (unsigned long long)m->access_pc);
         }
-        memcpy(r->host + off, buf, len);
+        if(r->page_host) {
+            unsigned done=0;
+            while(done<len) {
+                unsigned part=(1u<<HV_TLB_PAGE_BITS)-((off+done)&((1u<<HV_TLB_PAGE_BITS)-1));
+                if(part>len-done)part=len-done;
+                void *page=hv_ram_pointer(r,off+done,part);if(!page)return -1;
+                memcpy(page,(const uint8_t *)buf+done,part);done+=part;
+            }
+        } else memcpy(r->host + off, buf, len);
         return 0;
     }
     HvMmio *d = hv_mmio_lookup(m, pa);

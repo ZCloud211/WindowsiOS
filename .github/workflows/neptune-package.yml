@@ -1,0 +1,50 @@
+name: Verify Neptune ARM64X package
+on:
+  workflow_dispatch:
+  push:
+    branches: ['gpu-driver-build/**']
+    paths: ['.github/workflows/neptune-package.yml', 'drivers/windows/neptune/**']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download pinned upstream ARM64X driver
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force build/neptune | Out-Null
+          curl.exe --fail --location --output build/neptune.zip https://github.com/osy/kvm-guest-drivers-windows/releases/download/v0.5/viogpu3d-arm64x-signed.zip
+          if($LASTEXITCODE) { throw 'Download failed.' }
+          if((Get-FileHash build/neptune.zip -Algorithm SHA256).Hash -ne '155695AB7820F71E75C369AEAE7B8C060691BA43646AC37EDEF72AA2428506D5') { throw 'Archive hash mismatch.' }
+          Expand-Archive build/neptune.zip build/neptune -Force
+          Copy-Item drivers/windows/neptune/* build/neptune/drivers/viogpu3d/
+      - name: Verify Microsoft catalog under Windows kernel signing policy
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $sign=Get-ChildItem "${env:ProgramFiles(x86)}/Windows Kits/10/bin" -Recurse -Filter signtool.exe |
+            Where-Object FullName -Match '[\\/]x64[\\/]' | Sort-Object FullName -Descending | Select-Object -First 1
+          if(-not $sign) { throw 'SignTool missing.' }
+          Push-Location build/neptune/drivers/viogpu3d
+          & $sign.FullName verify /kp /v /c viogpu3d.cat viogpu3d.sys
+          if($LASTEXITCODE) { throw 'Kernel signature verification failed.' }
+          foreach($file in @('neptune_umd.dll','neptune_umd_arm64.dll','neptune_umd_ec.dll','neptune_umd_x86.dll','vgpusrv.exe','viogpuap.exe','vulkan_virtio.dll')) {
+            & $sign.FullName verify /pa /c viogpu3d.cat $file
+            if($LASTEXITCODE) { throw "Catalog verification failed: $file" }
+          }
+          Pop-Location
+      - name: Validate helper scripts in Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          foreach($file in Get-ChildItem drivers/windows/neptune -Filter '*.ps1') {
+            $tokens=$null;$errors=$null
+            [void][Management.Automation.Language.Parser]::ParseFile($file.FullName,[ref]$tokens,[ref]$errors)
+            if($errors.Count) { throw ($errors | Out-String) }
+          }
+          & ./build/neptune/drivers/viogpu3d/Install3D.ps1 -ValidateOnly
+          if($LASTEXITCODE) { throw 'Package validation failed.' }

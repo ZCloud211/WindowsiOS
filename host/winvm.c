@@ -124,12 +124,7 @@ void hv_winvm_set_display_layer(void *layer) {
 int hv_winvm_display_size(uint32_t *w, uint32_t *h) {
     HvFbDisplay *fb = atomic_load_explicit(&display_fb, memory_order_acquire);
     if (!fb) return -1;
-    const uint8_t *px = NULL;
-    uint32_t fw = 0, fh = 0, st = 0;
-    if (hv_fb_display_get_frame(fb, &px, &fw, &fh, &st) != 0) return -1;
-    if (w) *w = fw;
-    if (h) *h = fh;
-    return 0;
+    return hv_fb_display_get_size(fb,w,h);
 }
 
 uint64_t hv_winvm_display_frames(void) {
@@ -140,6 +135,10 @@ uint64_t hv_winvm_display_frames(void) {
 int hv_winvm_save_png(const char *path) {
     HvFbDisplay *fb = atomic_load_explicit(&display_fb, memory_order_acquire);
     return fb ? hv_fb_save_png(fb, path) : -1;
+}
+
+void hv_winvm_graphics_stats(HvFbMetalStats *stats) {
+    hv_fb_metal_stats(atomic_load_explicit(&display_fb, memory_order_acquire), stats);
 }
 
 int hv_winvm_create(const HvWinVmConfig *c, char *err, size_t errlen) {
@@ -162,7 +161,10 @@ int hv_winvm_create(const HvWinVmConfig *c, char *err, size_t errlen) {
         d0_ptr = &disk0;
     }
     if (c->disk1 && *c->disk1) {
-        if (hv_disk_open(&disk1, c->disk1, 0, 1) != 0)
+        /* Exposed as an ordinary writable NVMe disk, like USB install media.
+         * Windows may update disk/FAT metadata while mounting it; rejecting
+         * those writes without advertising write protection breaks mounting. */
+        if (hv_disk_open(&disk1, c->disk1, 0, 0) != 0)
             return fail(err, errlen, "Cannot open secondary/installer disk image.");
         d1_ptr = &disk1;
     }
@@ -400,4 +402,20 @@ void hv_winvm_engine_stats(uint64_t *jit_used_bytes, uint64_t *jit_cap_bytes,
     if (jit_cap_bytes) *jit_cap_bytes = (uint64_t)m.jit.capacity * 4ull;
     if (jit_full_flushes) *jit_full_flushes = m.stats.flush_full;
     if (wfi_ticks) *wfi_ticks = m.stats.wfi_ticks;
+}
+
+void hv_winvm_storage_stats(uint64_t *system_bytes, uint64_t *installer_bytes,
+                            uint64_t *system_read_bytes, uint64_t *installer_read_bytes) {
+    HvNvme *devices[2] = {board.nvme0, board.nvme1};
+    uint64_t *sizes[2] = {system_bytes, installer_bytes};
+    uint64_t *reads[2] = {system_read_bytes, installer_read_bytes};
+    for (int n = 0; n < 2; n++) {
+        if (sizes[n]) *sizes[n] = 0;
+        if (reads[n]) *reads[n] = 0;
+        if (!devices[n]) continue;
+        pthread_mutex_lock(&devices[n]->mu);
+        if (sizes[n] && devices[n]->disk) *sizes[n] = devices[n]->disk->size;
+        if (reads[n]) *reads[n] = devices[n]->rd_bytes;
+        pthread_mutex_unlock(&devices[n]->mu);
+    }
 }

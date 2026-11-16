@@ -1,19 +1,20 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Cross-compile libffi + glib + libslirp for arm64-apple-ios into ios/deps/,
-# and copy StikJIT.xcframework + build libhusk_rppairing.a for Built-in StikJIT.
+# StikDebug runs externally; no embedded pairing framework is required.
 set -euo pipefail
 
-export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
-
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export PATH="$ROOT/work/tools/bin:$ROOT/work/tools/python/bin:/opt/homebrew/bin:$PATH"
+for tool in meson ninja pkg-config python3; do
+    command -v "$tool" >/dev/null || { echo "Missing build tool: $tool" >&2; exit 1; }
+done
 WORK_DEPS="$ROOT/work/ios_deps_build"
 DL="$WORK_DEPS/sources"
 SRC="$WORK_DEPS/src"
 PREFIX="$WORK_DEPS/sysroot"
 STAMPS="$WORK_DEPS/stamps"
 OUT_DEPS="$ROOT/ios/deps"
-HUSK_REF="${HUSK_REF:-/Users/ammaar/.gemini/antigravity/brain/f6b287cc-b4bb-4bf9-b1ba-7daee58236c9/scratch/refs/Husk}"
 
 mkdir -p "$DL" "$SRC" "$PREFIX" "$STAMPS" "$OUT_DEPS/lib" "$OUT_DEPS/include"
 
@@ -66,7 +67,9 @@ fetch_unpack "$FFI_URL"
 fetch_unpack "$GLIB_URL"
 fetch_unpack "$SLIRP_URL"
 
-meson_quote() { echo "'$(echo $* | sed "s/ /','/g")'"; }
+meson_quote() {
+    python3 -c 'import shlex, sys; print(", ".join(repr(x) for x in shlex.split(sys.argv[1])))' "$1"
+}
 
 gen_cross() {
     local cross="$1" system="$2"
@@ -74,26 +77,26 @@ gen_cross() {
 [properties]
 needs_exe_wrapper = true
 [built-in options]
-c_args = [$(meson_quote $CFLAGS)]
-cpp_args = [$(meson_quote $CXXFLAGS)]
-objc_args = [$(meson_quote $OBJCFLAGS)]
-objcpp_args = [$(meson_quote $OBJCFLAGS)]
-c_link_args = [$(meson_quote $LDFLAGS)]
-cpp_link_args = [$(meson_quote $LDFLAGS)]
-objc_link_args = [$(meson_quote $LDFLAGS)]
-objcpp_link_args = [$(meson_quote $LDFLAGS)]
+c_args = [$(meson_quote "$CFLAGS")]
+cpp_args = [$(meson_quote "$CXXFLAGS")]
+objc_args = [$(meson_quote "$OBJCFLAGS")]
+objcpp_args = [$(meson_quote "$OBJCFLAGS")]
+c_link_args = [$(meson_quote "$LDFLAGS")]
+cpp_link_args = [$(meson_quote "$LDFLAGS")]
+objc_link_args = [$(meson_quote "$LDFLAGS")]
+objcpp_link_args = [$(meson_quote "$LDFLAGS")]
 [binaries]
-c = [$(meson_quote $CC)]
-cpp = [$(meson_quote $CXX)]
-objc = [$(meson_quote $OBJCC)]
-objcpp = [$(meson_quote $OBJCC)]
+c = [$(meson_quote "$CC")]
+cpp = [$(meson_quote "$CXX")]
+objc = [$(meson_quote "$OBJCC")]
+objcpp = [$(meson_quote "$OBJCC")]
 ar = ['$AR']
 nm = ['$NM']
 ranlib = ['$RANLIB']
 strip = ['$STRIP', '-x']
 pkg-config = ['$PKG_CONFIG']
 pkgconfig = ['$PKG_CONFIG']
-python = ['/opt/homebrew/bin/python3']
+python = ['$(command -v python3)']
 [host_machine]
 system = '$system'
 EOF
@@ -141,10 +144,7 @@ fi
 # 3. libslirp
 if [ ! -f "$STAMPS/libslirp" ]; then
     echo "[build] libslirp-v4.9.1"
-    if [ -f "$HUSK_REF/patches/libslirp-v4.9.1.patch" ] && [ ! -f "$SRC/libslirp-v4.9.1/.patched" ]; then
-        ( cd "$SRC/libslirp-v4.9.1" && patch -p1 -N -r - < "$HUSK_REF/patches/libslirp-v4.9.1.patch" || true )
-        touch "$SRC/libslirp-v4.9.1/.patched"
-    fi
+    # The darwin/ios cross file selects libslirp's existing resolv backend.
     rm -rf "$SRC/libslirp-v4.9.1/_ios_build"
     ( cd "$SRC/libslirp-v4.9.1" \
       && meson setup _ios_build --cross-file "$CROSS_DARWIN" --prefix="$PREFIX" \
@@ -162,12 +162,6 @@ for lib in libslirp.a libglib-2.0.a libintl.a libpcre2-8.a libffi.a; do
         cp "$PREFIX/lib/$lib" "$OUT_DEPS/lib/$lib"
     fi
 done
-
-# Copy StikJIT.xcframework if available
-if [ -d "$HUSK_REF/src/app/Frameworks/StikJIT.xcframework" ]; then
-    rm -rf "$OUT_DEPS/StikJIT.xcframework"
-    ditto "$HUSK_REF/src/app/Frameworks/StikJIT.xcframework" "$OUT_DEPS/StikJIT.xcframework"
-fi
 
 echo "=== iOS dependencies staged in $OUT_DEPS ==="
 ls -lh "$OUT_DEPS/lib"

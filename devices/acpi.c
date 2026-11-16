@@ -37,6 +37,7 @@ static void b_u8(Buf *b, uint8_t v) { b_put(b, &v, 1); }
 static void b_u16(Buf *b, uint16_t v) { b_put(b, &v, 2); }
 static void b_u32(Buf *b, uint32_t v) { b_put(b, &v, 4); }
 static void b_u64(Buf *b, uint64_t v) { b_put(b, &v, 8); }
+static void b_string(Buf *b, const char *s) { b_put(b, s, strlen(s) + 1); }
 
 static uint8_t acpi_cksum(const uint8_t *p, size_t len) {
     uint8_t sum = 0;
@@ -710,7 +711,7 @@ static size_t build_iort(Buf *tabs) {
     return start;
 }
 
-static void build_smbios(HvFwCfg *fw, int ncpus, uint64_t ram_size) {
+static void build_smbios(HvFwCfg *fw, int ncpus, uint64_t ram_size, const HvHostIdentity *identity) {
     Buf t = {0};
 
     /* Type 1: System Information (len 27) */
@@ -731,7 +732,7 @@ static void build_smbios(HvFwCfg *fw, int ncpus, uint64_t ram_size) {
         b_u8(&t, 0); /* SKU */
         b_u8(&t, 5); /* Family */
         b_put(&t, "Apple / WindowsiOS\0", 19);
-        b_put(&t, "iPhone Duo ARM64 PC\0", 20);
+        b_string(&t, identity->product);
         b_put(&t, "1.0\0", 4);
         b_put(&t, "DUO-WIN11-ARM64\0", 16);
         b_put(&t, "WindowsiOS\0", 11);
@@ -758,7 +759,7 @@ static void build_smbios(HvFwCfg *fw, int ncpus, uint64_t ram_size) {
         b_u8(&t, 0);
         b_u8(&t, 0);
         b_put(&t, "Apple\0", 6);
-        b_put(&t, "iPhone19,4\0", 11);
+        b_string(&t, identity->machine);
         b_u8(&t, 0);
     }
 
@@ -792,7 +793,7 @@ static void build_smbios(HvFwCfg *fw, int ncpus, uint64_t ram_size) {
         b_u16(&t, 0x0101U);
         b_put(&t, "SOC0\0", 5);
         b_put(&t, "Apple / ARM\0", 12);
-        b_put(&t, "Apple A20 Pro (WindowsiOS JIT)\0", 31);
+        b_string(&t, identity->chip);
         b_u8(&t, 0);
     }
 
@@ -890,7 +891,8 @@ static void build_smbios(HvFwCfg *fw, int ncpus, uint64_t ram_size) {
     free(t.buf);
 }
 
-void hv_acpi_build_and_register(HvFwCfg *fw, int ncpus, uint64_t ram_size, int spi_msi_base, int spi_msi_count) {
+void hv_acpi_build_and_register(HvFwCfg *fw, int ncpus, uint64_t ram_size, int spi_msi_base, int spi_msi_count,
+                                const HvHostIdentity *identity) {
     Buf tabs = {0};
     Loader ldr = {0};
 
@@ -973,7 +975,7 @@ void hv_acpi_build_and_register(HvFwCfg *fw, int ncpus, uint64_t ram_size, int s
     hv_fw_cfg_add_file(fw, "etc/boot-fail-wait", &boot_fail_wait, 4);
     hv_fw_cfg_add_file(fw, "etc/table-loader", ldr.buf.buf, ldr.buf.len);
 
-    build_smbios(fw, ncpus, ram_size);
+    build_smbios(fw, ncpus, ram_size, identity);
 
     free(tabs.buf);
     free(ldr.buf.buf);

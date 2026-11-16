@@ -209,35 +209,42 @@ bool winios_jit_acquire(size_t bytes, bool detach_after) {
         return false;
     }
 
+    if (__builtin_available(iOS 26.0, *)) {
+        // Newer systems continue through the debugger-assisted protocol below.
+    } else {
+        // StikDebug on iOS 18 attaches and detaches without servicing BRK calls.
+        // Do not probe: a still-attached ordinary debugger would stop on that trap.
+        release_low_hold(bytes);
+        uint8_t *rx = mmap(NULL, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+        if (rx != MAP_FAILED) {
+            vm_address_t rw = 0;
+            vm_prot_t cur, max;
+            if (vm_remap(mach_task_self(), &rw, bytes, 0, VM_FLAGS_ANYWHERE, mach_task_self(),
+                         (vm_address_t)rx, FALSE, &cur, &max, VM_INHERIT_NONE) == KERN_SUCCESS &&
+                vm_protect(mach_task_self(), (vm_address_t)rx, bytes, FALSE,
+                           VM_PROT_READ | VM_PROT_EXECUTE) == KERN_SUCCESS &&
+                vm_protect(mach_task_self(), rw, bytes, FALSE,
+                           VM_PROT_READ | VM_PROT_WRITE) == KERN_SUCCESS) {
+                WinIosDualMapping m = {(uint8_t *)rw, rx, bytes};
+                if (jit_selftest(&m)) {
+                    g_mapping = m;
+                    atomic_store(&g_jit_live, true);
+                    set_status("Live (%zu MiB plain RX/RW)", bytes >> 20);
+                    return true;
+                }
+            }
+            if (rw) vm_deallocate(mach_task_self(), rw, bytes);
+            munmap(rx, bytes);
+        }
+        set_status("Failed to create executable RX/RW mapping; enable JIT in StikDebug and retry");
+        return false;
+    }
+
     g_expecting_jit_trap = true;
     uint64_t probe = winios_brk_probe();
     g_expecting_jit_trap = false;
 
     if (probe == 0) {
-        /* Pre-iOS 26 fallback where CS_DEBUGGED permits plain vm_remap RX/RW without trap servicing */
-        if (!__builtin_available(iOS 26.0, *)) {
-            release_low_hold(bytes);
-            uint8_t *rx = mmap(NULL, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
-            if (rx != MAP_FAILED) {
-                vm_address_t rw = 0;
-                vm_prot_t cur, max;
-                if (vm_remap(mach_task_self(), &rw, bytes, 0, VM_FLAGS_ANYWHERE, mach_task_self(),
-                             (vm_address_t)rx, FALSE, &cur, &max, VM_INHERIT_NONE) == KERN_SUCCESS &&
-                    vm_protect(mach_task_self(), (vm_address_t)rx, bytes, FALSE,
-                               VM_PROT_READ | VM_PROT_EXECUTE) == KERN_SUCCESS &&
-                    vm_protect(mach_task_self(), rw, bytes, FALSE,
-                               VM_PROT_READ | VM_PROT_WRITE) == KERN_SUCCESS) {
-                    WinIosDualMapping m = {(uint8_t *)rw, rx, bytes};
-                    if (jit_selftest(&m)) {
-                        g_mapping = m;
-                        atomic_store(&g_jit_live, true);
-                        set_status("Live (%zu MiB plain RX/RW)", bytes >> 20);
-                        return true;
-                    }
-                }
-                munmap(rx, bytes);
-            }
-        }
         set_status("Debugger attached, waiting for brk trap handler");
         WINIOS_LOG("probe returned 0 (debugger did not answer brk #0x69)");
         return false;

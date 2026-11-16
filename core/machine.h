@@ -13,6 +13,10 @@
 typedef struct HvRam {
     uint64_t pa, size;
     uint8_t *host;
+    /* Optional PCI aperture: one immutable host page pointer per 4KB guest
+       page. Only cache refills consult this table; generated loads/stores
+       still use the normal direct host addend. Device pages are never code. */
+    uint8_t **page_host;
     int readonly;
     uint8_t *code_pages; /* one byte per 16 KB page: a translated block came from here (2^pages_log2 of them) */
     uint32_t pages_log2;
@@ -23,6 +27,12 @@ typedef struct HvRam {
        TLB scanned. */
     uint64_t *whint;
 } HvRam;
+
+static inline uint64_t hv_ram_base(const HvRam *r) {
+    return __atomic_load_n(&r->pa, __ATOMIC_RELAXED);
+}
+/* Returns a direct pointer only if the complete requested span is contiguous. */
+void *hv_ram_pointer(HvRam *r, uint64_t offset, uint64_t length);
 
 typedef struct HvMmio {
     uint64_t pa, size;
@@ -282,6 +292,11 @@ int hv_machine_init(HvMachine *m, size_t jit_bytes);
 /* The same with JIT memory the host provides (iOS: the region a debugger granted and its writable alias). */
 int hv_machine_init_jit(HvMachine *m, void *rx, void *rw, size_t jit_bytes);
 void hv_machine_free(HvMachine *m);
+/* Caller serializes device updates. CPU flushes are asynchronous; the device
+   must withhold completion until each returned ticket has been acknowledged. */
+void hv_machine_memory_changed(struct HvMachine *m, uint64_t tickets[HV_MAX_CPUS]);
+int hv_machine_memory_ready(struct HvMachine *m, const uint64_t tickets[HV_MAX_CPUS]);
+
 int hv_machine_add_ram(HvMachine *m, uint64_t pa, uint64_t size, void *host, int readonly);
 int hv_machine_add_mmio(HvMachine *m, uint64_t pa, uint64_t size, void *opaque,
                         uint64_t (*read)(void *, uint64_t, unsigned),

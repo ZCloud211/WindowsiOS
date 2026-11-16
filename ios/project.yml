@@ -1,16 +1,14 @@
 name: WindowsiOS
 options:
-  bundleIdPrefix: me.ammaar
+  bundleIdPrefix: com.zcloud211
   deploymentTarget:
     iOS: "17.0"
   xcodeVersion: "16.0"
 
 settings:
   base:
-    DEVELOPMENT_TEAM: 7S264298H8
-    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_STYLE: Automatic
     CODE_SIGN_IDENTITY: "Apple Development"
-    PROVISIONING_PROFILE_SPECIFIER: "WindowsiOS Duo Dev"
     IPHONEOS_DEPLOYMENT_TARGET: "17.0"
     TARGETED_DEVICE_FAMILY: "1,2"
     SWIFT_VERSION: "5.0"
@@ -27,17 +25,28 @@ targets:
           - "Resources/**"
       - path: Sources/Resources/henge-jit.js
         buildPhase: resources
+      - path: Sources/Resources/Firmware
+        type: folder
+        buildPhase: resources
+      - path: Sources/Resources/Licenses
+        type: folder
+        buildPhase: resources
+      - path: Sources/Resources/DisplayDrivers
+        type: folder
+        buildPhase: resources
     info:
       path: Sources/Info.plist
       properties:
         CFBundleDisplayName: Windows 11
+        CFBundleShortVersionString: "1.8.0"
+        CFBundleVersion: "15"
         LSRequiresIPhoneOS: true
         UILaunchScreen: {}
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         UIStatusBarHidden: true
         UIViewControllerBasedStatusBarAppearance: false
-        NSMicrophoneUsageDescription: "Windows 11 and Antigravity use your iPhone Duo microphone for live voice input and audio capture."
+        NSMicrophoneUsageDescription: "Windows uses your microphone for voice input and audio capture."
         UIBackgroundModes:
           - audio
         UISupportedInterfaceOrientations:
@@ -56,11 +65,8 @@ targets:
         get-task-allow: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: me.ammaar.windowsios
+        PRODUCT_BUNDLE_IDENTIFIER: com.zcloud211.windowsios
         PRODUCT_NAME: WindowsiOS
-        CODE_SIGN_STYLE: Manual
-        CODE_SIGN_IDENTITY: "Apple Development: Ammaar Reshi (6U8W89GC8D)"
-        PROVISIONING_PROFILE_SPECIFIER: "WindowsiOS Duo Dev"
         TARGETED_DEVICE_FAMILY: "1,2"
         SWIFT_OBJC_BRIDGING_HEADER: $(PROJECT_DIR)/Sources/Native/WindowsiOS-Bridging-Header.h
         HEADER_SEARCH_PATHS:
@@ -77,6 +83,9 @@ targets:
         OTHER_LDFLAGS:
           - $(inherited)
           - -lwinvm
+          - -lvirglrenderer
+          - -lepoxy
+          - -lwim
           - -lslirp
           - -lglib-2.0
           - -lintl
@@ -85,6 +94,9 @@ targets:
           - -lresolv
           - -liconv
     dependencies:
+      - framework: deps/GPU3D/DXMT.framework
+        embed: true
+        codeSign: true
       - sdk: AVFoundation.framework
       - sdk: SafariServices.framework
       - sdk: Metal.framework

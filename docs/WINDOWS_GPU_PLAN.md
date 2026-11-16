@@ -1,6 +1,10 @@
+当前 3D 开发为 Triton/Neptune → native DXMT → Metal，已有完整 iOS 预览构建和 Mac 真实 D3D11 验证。iPad Windows 端尚未验证。实现、依赖与限制见 [WINDOWS_3D_ROUTE.md](WINDOWS_3D_ROUTE.md)。
+
 # Windows ARM64 → Metal GPU 适配目标
 
 目标设备为 M1 iPad Pro、iPadOS 18.7.8、StikDebug/JIT。用户要求 GPU 阶段优先追求 Windows 实际绘图效率，并以 Henge 为主要渲染参考。
+
+2026-11-16 路线更新：已核对 Triton / Neptune 的 Windows ARM64X WDDM 驱动与 DXMT native 的 iOS 支持。后续优先复用这些组件，将共享资源与直接呈现接到当前宿主；不再以扩展固定三角形探针为完整 3D 主线。具体比较、对接范围与候选版本见 [WINDOWS_3D_ROUTE.md](WINDOWS_3D_ROUTE.md)。这是源码可行性结论，尚未完成移植或 iPad 性能验证。
 
 ## 目标架构
 
