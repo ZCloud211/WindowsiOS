@@ -24,3 +24,9 @@ then installs the original display driver. No script restarts Windows automatica
 
 Mac native D3D11 and transport results do not prove iPad Windows DWM acceleration.
 Device validation and performance measurements remain outstanding.
+
+PnPUtil exit 259 is not a generic install failure or a generic success. The
+installer now accepts it as an already-current no-op only when all target
+devices are bound to the pinned-or-newer VioGpu3D driver without a PnP problem.
+It records the resulting binding even on failure. This does not prove D3D11
+or DWM hardware rendering. Regression cases run in Windows PowerShell 5.1.

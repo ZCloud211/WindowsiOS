@@ -48,3 +48,5 @@ jobs:
           }
           & ./build/neptune/drivers/viogpu3d/Install3D.ps1 -ValidateOnly
           if($LASTEXITCODE) { throw 'Package validation failed.' }
+          & ./drivers/windows/neptune/TestInstallResult.ps1
+          if($LASTEXITCODE) { throw 'Return-code classification regression failed.' }
