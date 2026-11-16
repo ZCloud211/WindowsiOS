@@ -49,9 +49,10 @@
 - 512MiB PCI 共享窗口以 4KB 页别名映射独立宿主资源，解决 Windows 4KB / Apple 16KB 差异，无需修改已签名的 KMD。TLB 缓存命中仍直接读写宿主指针；映射更换请求各 CPU 丢弃缓存，并等待确认后回收旧映射和完成队列。
 - Metal 可直接呈现保留的原生纹理，或从 Neptune 导出的共享 FD 建立不复制的线性纹理。iOS 匿名共享 FD 使用 App 临时目录内立即 unlink 的文件，不要求 App Group 权限；这依然是文件映射，尚未量化其写回代价。Neptune/DXMT 内部可能有 GPU 表面转换，不能声称整个链路绝对零复制。
 - Mac M1 的 native DXMT suite：181 项通过、0 失败，包含真实着色器、纹理、深度、混合、MSAA、计算与同步。真实 Neptune 命令流成功创建 D3D11 硬件设备、使用共享 reply blob，并完成异步围栏。
+- 两个独立 native D3D11 设备间的共享 BGRA 纹理导出、导入和 GPU 绘制通过逐像素验证；导出的 FD 也与渲染结果一致。DXMT 与 Neptune 的 iOS 共享分配均带临时文件适配补丁。
 - Mac Metal 测试通过原生私有纹理和共享 FD 呈现，并核验生产者更新的每个像素；VirtIO split queue 的 3D 协议与现有 2D/MSI-X 回归通过。
-- 1.8.0 build 15 IPA 打包 native DXMT framework、Neptune 与完整上游 ARM64X v0.5 驱动。3D 预览开关初始关闭；用户在 App 启用后，启动 Windows 并运行 WINIOSDRV 的 `3d.cmd` 安装，JIT/启动/Windows 操作仍由用户执行。
-- 驱动目录证书为 Microsoft Windows Hardware Compatibility Publisher，SYS 内嵌签名为 Turing Software EV；不改 INF/CAT/二进制，不更改 Windows 签名策略。Windows 内核策略的 SignTool 验证由独立分支 CI 执行。
+- 1.8.0 build 16 IPA 打包 native DXMT framework、Neptune 与完整上游 ARM64X v0.5 驱动。3D 预览开关初始关闭；用户在 App 启用后，启动 Windows 并运行 WINIOSDRV 的 `3d.cmd` 安装，JIT/启动/Windows 操作仍由用户执行。
+- 驱动目录证书为 Microsoft Windows Hardware Compatibility Publisher，SYS 内嵌签名为 Turing Software EV；不改 INF/CAT/二进制，不更改 Windows 签名策略。Windows 内核策略的 SignTool 验证及 PowerShell 5.1 安装脚本验证已在独立分支 CI [43785214442](https://github.com/ZCloud211/WindowsiOS/actions/runs/43785214442) 通过。
 
 **尚未确认**：iPad 上实际加载的 3D 驱动、Windows DWM/应用的硬件渲染、模式切换与长时间运行，以及帧时间/功耗/同步/复制的实测结果。Mac 成功或 IPA 构建成功均不能替代这些结果。
 

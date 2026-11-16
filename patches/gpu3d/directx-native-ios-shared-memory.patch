@@ -1,0 +1,41 @@
+diff --git a/src/dxn_shm_darwin.c b/src/dxn_shm_darwin.c
+index b5a3da0..d49fbe6 100644
+--- a/src/dxn_shm_darwin.c
++++ b/src/dxn_shm_darwin.c
+@@ -8,6 +8,7 @@
+ #include "directx-native/dxn_shm.h"
+ 
+ #include "dxn_private.h"
++#include <TargetConditionals.h>
+ 
+ #include <errno.h>
+ #include <fcntl.h>
+@@ -48,6 +49,22 @@ dxn_shm_create(uint64_t size)
+         return -1;
+     }
+ 
++#if TARGET_OS_IPHONE
++    /* iOS development apps need not have an App Group entitlement. The FD
++       remains anonymous and shared across the same-process renderer threads. */
++    const char *temp = getenv("TMPDIR");
++    if (!temp || !*temp) { errno = ENOENT; return -1; }
++    char *name = NULL;
++    if (asprintf(&name, "%s/dxn-shared-XXXXXX", temp) < 0) return -1;
++    int fd = mkstemp(name);
++    if (fd >= 0) unlink(name);
++    free(name);
++    if (fd < 0) return -1;
++    if (fcntl(fd, F_SETFD, FD_CLOEXEC) < 0 || ftruncate(fd, (off_t)size)) {
++        int saved_errno = errno; close(fd); errno = saved_errno; return -1;
++    }
++    return fd;
++#else
+     /* Under App Sandbox a shm name must live in the app group container,
+      * i.e. be prefixed with the group identifier instead of '/'; anything
+      * else is denied.  The PSHMNAMLEN budget then leaves no room for a tag
+@@ -97,4 +114,5 @@ dxn_shm_create(uint64_t size)
+         return -1;
+     }
+     return fd;
++#endif
+ }

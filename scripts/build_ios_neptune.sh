@@ -69,6 +69,15 @@ else
 fi
 meson compile -C "$EPOXY_BUILD" -j "$JOBS"
 meson install -C "$EPOXY_BUILD"
+if [ ! -f "$SOURCE/subprojects/directx-native/src/dxn_shm_darwin.c" ]; then
+    (cd "$SOURCE" && meson subprojects download directx-native)
+fi
+PATCH="$ROOT/patches/gpu3d/directx-native-ios-shared-memory.patch"
+if git -C "$SOURCE/subprojects/directx-native" apply --check "$PATCH" 2>/dev/null; then
+    git -C "$SOURCE/subprojects/directx-native" apply "$PATCH"
+else
+    git -C "$SOURCE/subprojects/directx-native" apply --reverse --check "$PATCH"
+fi
 BUILD="$TASK_WORK/neptune-ios"
 ARGS=(--cross-file "$CROSS_FILE" --prefix "$PREFIX" --libdir lib
     --buildtype release --default-library static -Dplatforms=[]

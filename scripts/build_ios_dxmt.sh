@@ -97,6 +97,16 @@ cpu_family = 'aarch64'
 cpu = 'aarch64'
 endian = 'little'
 EOF
+# Resolve the pinned Meson wrap before applying the native iOS allocation patch.
+if [ ! -f "$DXMT_SOURCE/subprojects/directx-native/src/dxn_shm_darwin.c" ]; then
+    (cd "$DXMT_SOURCE" && meson subprojects download directx-native)
+fi
+PATCH="$ROOT/patches/gpu3d/directx-native-ios-shared-memory.patch"
+if git -C "$DXMT_SOURCE/subprojects/directx-native" apply --check "$PATCH" 2>/dev/null; then
+    git -C "$DXMT_SOURCE/subprojects/directx-native" apply "$PATCH"
+else
+    git -C "$DXMT_SOURCE/subprojects/directx-native" apply --reverse --check "$PATCH"
+fi
 echo "Building native iOS DXMT D3D11 backend"
 MESON_ARGS=(--cross-file "$CROSS_FILE" --prefix "$PREFIX" --libdir lib
     --buildtype release -Dnative_llvm_path="$LLVM_PREFIX"

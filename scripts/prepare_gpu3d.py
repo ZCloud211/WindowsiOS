@@ -39,7 +39,7 @@ def main():
         shutil.copy2(a,licenses/b)
     record={'native_dxmt':json.loads((native/'BUILD.json').read_text()),'neptune':json.loads((renderer/'BUILD.json').read_text()),
         'windows_driver':'https://github.com/osy/kvm-guest-drivers-windows/releases/tag/v0.5',
-        'windows_archive_sha256':sha(archive),'windows_signature':'Microsoft Windows Hardware Compatibility Publisher catalog; Turing Software EV binary; Windows kernel-policy verification pending',
+        'windows_archive_sha256':sha(archive),'windows_signature':'Microsoft Windows Hardware Compatibility Publisher catalog; Turing Software EV binary; Windows kernel-policy verification passed in GitHub Actions run 43785214442',
         'windows_device_validated':False,'framework_sha256':sha(framework/'DXMT')}
     for part in ('native_dxmt','neptune'):record[part].pop('library',None)
     (DEPS/'GPU3D/BUILD.json').write_text(json.dumps(record,indent=2)+'\n')
